@@ -1,5 +1,6 @@
-import TimelineWorkbench from './timeline-workbench';
+import ComparisonWorkbench from './comparison-workbench';
+import './comparison.css';
 
 export default function Home() {
-  return <TimelineWorkbench />;
+  return <ComparisonWorkbench />;
 }

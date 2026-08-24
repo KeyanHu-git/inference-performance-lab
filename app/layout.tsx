@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'ChronoScope · 模型加载时间图谱',
-  description: '面向模型加载实验的证据驱动时间线工作台。',
+  title: '模型加载实验对比',
+  description: 'DeepSeek 模型加载实验时间对比。',
 };
 
 export default function RootLayout({
