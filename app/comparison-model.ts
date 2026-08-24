@@ -1,4 +1,6 @@
 export type NodeKind = 'start' | 'progress' | 'rank' | 'mtp' | 'ready' | 'open';
+export type LinkKind = 'sequence' | 'branch' | 'join';
+export type LinkOrigin = 'observed' | 'declared' | 'inferred' | 'fallback';
 
 export interface TimeNode {
   id: string;
@@ -8,6 +10,14 @@ export interface TimeNode {
   lane?: 0 | 1;
   detail: string;
   locator: string;
+}
+
+export interface TimeLink {
+  id: string;
+  from: string;
+  to: string;
+  kind: LinkKind;
+  origin: LinkOrigin;
 }
 
 export interface RealExperiment {
@@ -22,11 +32,16 @@ export interface RealExperiment {
   complete: boolean;
   source: string;
   nodes: TimeNode[];
+  links: TimeLink[];
 }
 
 export const maximumTime = 1500;
 export const baselineWeight = 1163.48;
 export const realLogCount = 13;
+
+function relation(id: string, from: string, to: string, kind: LinkKind = 'sequence', origin: LinkOrigin = 'observed'): TimeLink {
+  return { id, from, to, kind, origin };
+}
 
 export const realExperiments: RealExperiment[] = [
   {
@@ -49,6 +64,15 @@ export const realExperiments: RealExperiment[] = [
       { id: 'a-mtp', label: 'MTP 权重', time: 1366, kind: 'mtp', detail: 'MTP 权重完成', locator: 'L788–852' },
       { id: 'a-ready', label: '服务就绪', time: 1500, kind: 'ready', detail: 'Engine 初始化完成', locator: 'L1075–1076' },
     ],
+    links: [
+      relation('a-r1', 'a-engine', 'a-load'),
+      relation('a-r2', 'a-load', 'a-17'),
+      relation('a-r3', 'a-17', 'a-dp0', 'branch'),
+      relation('a-r4', 'a-17', 'a-dp1', 'branch'),
+      relation('a-r5', 'a-dp0', 'a-mtp', 'join'),
+      relation('a-r6', 'a-dp1', 'a-mtp', 'join'),
+      relation('a-r7', 'a-mtp', 'a-ready'),
+    ],
   },
   {
     id: 'dtfs-b',
@@ -70,6 +94,15 @@ export const realExperiments: RealExperiment[] = [
       { id: 'b-mtp', label: 'MTP 权重', time: 1362, kind: 'mtp', detail: 'MTP 权重完成', locator: 'L2020–2025' },
       { id: 'b-ready', label: '服务就绪', time: 1437, kind: 'ready', detail: 'Engine 初始化完成', locator: 'L2281–2282' },
     ],
+    links: [
+      relation('b-r1', 'b-engine', 'b-load'),
+      relation('b-r2', 'b-load', 'b-17'),
+      relation('b-r3', 'b-17', 'b-dp0', 'branch'),
+      relation('b-r4', 'b-17', 'b-dp1', 'branch'),
+      relation('b-r5', 'b-dp0', 'b-mtp', 'join'),
+      relation('b-r6', 'b-dp1', 'b-mtp', 'join'),
+      relation('b-r7', 'b-mtp', 'b-ready'),
+    ],
   },
   {
     id: 'dtfs-dp1',
@@ -89,6 +122,12 @@ export const realExperiments: RealExperiment[] = [
       { id: 'd-main', label: '主权重', time: 339, kind: 'rank', lane: 1, detail: '主权重 238.27 s', locator: 'L351' },
       { id: 'd-mtp', label: 'MTP 权重', time: 367, kind: 'mtp', detail: 'MTP 权重完成；日志未记录服务就绪', locator: 'L438' },
     ],
+    links: [
+      relation('d-r1', 'd-engine', 'd-load'),
+      relation('d-r2', 'd-load', 'd-17'),
+      relation('d-r3', 'd-17', 'd-main'),
+      relation('d-r4', 'd-main', 'd-mtp'),
+    ],
   },
   {
     id: 'prefetch',
@@ -104,6 +143,10 @@ export const realExperiments: RealExperiment[] = [
       { id: 'p-engine', label: '引擎启动', time: 0, kind: 'start', detail: 'EngineCore 开始初始化', locator: 'L63' },
       { id: 'p-load', label: '权重开始', time: 88, kind: 'start', detail: '16 个 Worker 开始加载模型', locator: 'L336–415' },
       { id: 'p-17', label: '权重 12/70', time: 280, kind: 'open', detail: '192 s 到达 12/70，实验在此终止', locator: 'L556' },
+    ],
+    links: [
+      relation('p-r1', 'p-engine', 'p-load'),
+      relation('p-r2', 'p-load', 'p-17'),
     ],
   },
   {
@@ -126,6 +169,15 @@ export const realExperiments: RealExperiment[] = [
       { id: 'c-mtp', label: 'MTP 权重', time: 186, kind: 'mtp', detail: '较慢节点MTP完成', locator: 'rank-001 L735–736' },
       { id: 'c-ready', label: '服务就绪', time: 310, kind: 'ready', detail: '较慢节点 Engine 初始化完成', locator: 'rank-001 L818–819' },
     ],
+    links: [
+      relation('c-r1', 'c-engine', 'c-load'),
+      relation('c-r2', 'c-load', 'c-17'),
+      relation('c-r3', 'c-17', 'c-dp0', 'branch'),
+      relation('c-r4', 'c-17', 'c-dp1', 'branch'),
+      relation('c-r5', 'c-dp0', 'c-mtp', 'join'),
+      relation('c-r6', 'c-dp1', 'c-mtp', 'join'),
+      relation('c-r7', 'c-mtp', 'c-ready'),
+    ],
   },
   {
     id: 'ram-warm',
@@ -147,6 +199,15 @@ export const realExperiments: RealExperiment[] = [
       { id: 'w-mtp', label: 'MTP 权重', time: 190, kind: 'mtp', detail: '较慢节点MTP完成', locator: 'L735–737' },
       { id: 'w-ready', label: '服务就绪', time: 314, kind: 'ready', detail: '较慢节点 Engine 初始化完成', locator: 'rank-000 L817–819' },
     ],
+    links: [
+      relation('w-r1', 'w-engine', 'w-load'),
+      relation('w-r2', 'w-load', 'w-17'),
+      relation('w-r3', 'w-17', 'w-dp1', 'branch'),
+      relation('w-r4', 'w-17', 'w-dp0', 'branch'),
+      relation('w-r5', 'w-dp1', 'w-mtp', 'join'),
+      relation('w-r6', 'w-dp0', 'w-mtp', 'join'),
+      relation('w-r7', 'w-mtp', 'w-ready'),
+    ],
   },
   {
     id: 'glm-ram-cold',
@@ -167,9 +228,22 @@ export const realExperiments: RealExperiment[] = [
       { id: 'gc-load', label: '权重开始', time: 1113, kind: 'start', detail: '32 个 Worker 从 RAM Disk 开始加载主权重', locator: 'service rank-{000,001} L572/L484' },
       { id: 'gc-dp0', label: 'DP0 权重', time: 1196, kind: 'rank', lane: 0, detail: 'DP0 主权重 65.72 s', locator: 'service rank-000 L802' },
       { id: 'gc-dp1', label: 'DP1 权重', time: 1203, kind: 'rank', lane: 1, detail: 'DP1 主权重 72.71 s', locator: 'service rank-001 L537' },
-      { id: 'gc-mtp', label: 'MTP 权重', time: 1224, kind: 'mtp', detail: '较慢节点 MTP 权重 1.52 s', locator: 'service rank-001 L637' },
+      { id: 'gc-mtp0', label: 'MTP · DP0', time: 1218, kind: 'mtp', lane: 0, detail: 'DP0 MTP 权重 1.12 s', locator: 'service rank-000 L920' },
+      { id: 'gc-mtp1', label: 'MTP · DP1', time: 1224, kind: 'mtp', lane: 1, detail: 'DP1 MTP 权重 1.52 s', locator: 'service rank-001 L637' },
       { id: 'gc-graph', label: '图捕获', time: 1411, kind: 'mtp', detail: '两个节点完成 NPU Graph 捕获，均耗时 137 s', locator: 'service rank-{000,001} L1076/L784' },
       { id: 'gc-ready', label: '服务就绪', time: 1447, kind: 'ready', detail: 'API 就绪；健康检查与模型列表验证通过', locator: '模型加载速度实验 L198–201' },
+    ],
+    links: [
+      relation('gc-r1', 'gc-stage-start', 'gc-stage-end'),
+      relation('gc-r2', 'gc-vllm', 'gc-engine'),
+      relation('gc-r3', 'gc-engine', 'gc-load'),
+      relation('gc-r4', 'gc-load', 'gc-dp0', 'branch'),
+      relation('gc-r5', 'gc-load', 'gc-dp1', 'branch'),
+      relation('gc-r6', 'gc-dp0', 'gc-mtp0'),
+      relation('gc-r7', 'gc-dp1', 'gc-mtp1'),
+      relation('gc-r8', 'gc-mtp0', 'gc-graph', 'join'),
+      relation('gc-r9', 'gc-mtp1', 'gc-graph', 'join'),
+      relation('gc-r10', 'gc-graph', 'gc-ready'),
     ],
   },
   {
@@ -189,9 +263,21 @@ export const realExperiments: RealExperiment[] = [
       { id: 'gw-load', label: '权重开始', time: 215, kind: 'start', detail: '32 个 Worker 从 RAM Disk 开始加载主权重', locator: 'service rank-{000,001} L570/L481' },
       { id: 'gw-dp0', label: 'DP0 权重', time: 271, kind: 'rank', lane: 0, detail: 'DP0 主权重 39.73 s', locator: 'service rank-000 L801' },
       { id: 'gw-dp1', label: 'DP1 权重', time: 271, kind: 'rank', lane: 1, detail: 'DP1 主权重 40.00 s', locator: 'service rank-001 L537' },
-      { id: 'gw-mtp', label: 'MTP 权重', time: 293, kind: 'mtp', detail: '较慢节点 MTP 权重 0.39 s', locator: 'service rank-000 L926' },
+      { id: 'gw-mtp0', label: 'MTP · DP0', time: 293, kind: 'mtp', lane: 0, detail: 'DP0 MTP 权重 0.39 s', locator: 'service rank-000 L926' },
+      { id: 'gw-mtp1', label: 'MTP · DP1', time: 289, kind: 'mtp', lane: 1, detail: 'DP1 MTP 权重 0.33 s', locator: 'service rank-001 L641' },
       { id: 'gw-graph', label: '图捕获', time: 448, kind: 'mtp', detail: '两个节点完成 NPU Graph 捕获，均耗时 120 s', locator: 'service rank-{000,001} L1080/L812' },
       { id: 'gw-ready', label: '服务就绪', time: 484, kind: 'ready', detail: 'API 就绪；健康检查与模型列表验证通过', locator: '模型加载速度实验 L222' },
+    ],
+    links: [
+      relation('gw-r1', 'gw-vllm', 'gw-engine'),
+      relation('gw-r2', 'gw-engine', 'gw-load'),
+      relation('gw-r3', 'gw-load', 'gw-dp0', 'branch'),
+      relation('gw-r4', 'gw-load', 'gw-dp1', 'branch'),
+      relation('gw-r5', 'gw-dp0', 'gw-mtp0'),
+      relation('gw-r6', 'gw-dp1', 'gw-mtp1'),
+      relation('gw-r7', 'gw-mtp0', 'gw-graph', 'join'),
+      relation('gw-r8', 'gw-mtp1', 'gw-graph', 'join'),
+      relation('gw-r9', 'gw-graph', 'gw-ready'),
     ],
   },
 ];
