@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, FileUp, SlidersHorizontal, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useMemo, useRef, useState } from 'react';
-import { baselineWeight, formatSeconds, RealExperiment, realExperiments, realLogCount, TimeLink, TimeNode } from './comparison-model';
+import { formatSeconds, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type RelationFocus = { experimentId: string; linkId: string } | null;
@@ -39,7 +39,7 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
     return value > bestValue ? item : best;
   }, undefined);
   const mtp = find(/MTP.*(?:weights?|loading).*(?:took|complete|loaded)|(?:took|complete|loaded).*MTP/i);
-  const ready = find(/engine core initialization took|init engine.*took|Application startup complete|service.*ready/i);
+  const ready = find(/Application startup complete|Uvicorn running|service.*ready|GET \/(?:health|v1\/models).*200/i);
 
   const progressCandidates = lines
     .map((item) => {
@@ -71,6 +71,12 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
   const total = Math.max(1, nodes.at(-1)?.time ?? mainWeight ?? 1);
   const short = file.name.replace(/\.(log|txt)$/i, '').slice(0, 20);
   const stamp = engine.line.match(/(\d{2}-\d{2}\s+\d{2}:\d{2})/)?.[1] ?? '本地导入';
+  const status: RunStatus = ready ? 'complete' : main ? 'evidence-gap' : progress ? 'partial' : 'evidence-gap';
+  const statusLabel = status === 'complete'
+    ? '已完成 · 服务就绪'
+    : status === 'partial'
+      ? `未完成 · 停于 ${progress?.done ?? '?'}\/${progress?.total ?? '?'}`
+      : '证据残缺 · 缺服务终点';
   return {
     id: `local-${Date.now()}-${order}`,
     name: short,
@@ -80,7 +86,8 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
     date: stamp,
     total,
     mainWeight,
-    complete: Boolean(ready),
+    status,
+    statusLabel,
     source: file.name,
     nodes,
     links: nodes.slice(1).map((node, index) => ({
@@ -357,16 +364,17 @@ export default function ComparisonWorkbench() {
         <div className="axis-row">
           <span className="axis-label">实验<button className="column-resizer" onPointerDown={startColumnResize} onDoubleClick={() => setLabelWidth(162)} aria-label="调整实验列宽度" title="拖动调整列宽，双击恢复" /></span>
           <div className="shared-axis">{ticks.map((tick) => <span key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }}>{formatSeconds(tick)}</span>)}</div>
-          <span className="axis-metric">权重</span>
+          <span className="axis-metric">全链路</span>
         </div>
 
         <div className="experiment-list">
           {visibleExperiments.map((experiment) => {
             const width = (experiment.total / maximumTime) * 100;
             const referenceExperiment = experiments.find((item) => item.id === baselines[experiment.model])
-              ?? experiments.find((item) => item.model === experiment.model && item.mainWeight);
-            const referenceWeight = referenceExperiment?.mainWeight ?? baselineWeight;
-            const delta = experiment.mainWeight && referenceWeight ? ((experiment.mainWeight - referenceWeight) / referenceWeight) * 100 : undefined;
+              ?? experiments.find((item) => item.model === experiment.model && item.status === 'complete');
+            const delta = experiment.status === 'complete' && referenceExperiment?.status === 'complete'
+              ? ((experiment.total - referenceExperiment.total) / referenceExperiment.total) * 100
+              : undefined;
             const isBaseline = baselines[experiment.model] === experiment.id;
             const focusedLink = relationFocus?.experimentId === experiment.id
               ? experiment.links.find((link) => link.id === relationFocus.linkId)
@@ -375,18 +383,18 @@ export default function ComparisonWorkbench() {
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}`}
                 key={experiment.id}
-                onDoubleClick={() => experiment.mainWeight && setBaselines((current) => ({ ...current, [experiment.model]: experiment.id }))}
-                title={`${experiment.name} · ${experiment.config} · 双击设为该模型基线`}
+                onDoubleClick={() => experiment.status === 'complete' && setBaselines((current) => ({ ...current, [experiment.model]: experiment.id }))}
+                title={`${experiment.name} · ${experiment.config}${experiment.status === 'complete' ? ' · 双击设为该模型基线' : ''}`}
               >
                 <div className="experiment-name">
-                  <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span></div>
+                  <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small></div>
                   {isBaseline && <span className="base-dot" title="当前模型基线" />}
                 </div>
 
                 <div className="band-track">
                   {ticks.map((tick) => <span className="track-grid" key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }} />)}
                   <div
-                    className={`jelly-shell${experiment.complete ? '' : ' is-open'}`}
+                    className={`jelly-shell status-${experiment.status}`}
                     style={{ width: `${width}%`, '--band-scale': `${10000 / width}%`, '--mx': '42%', '--my': '8%', '--rx': '0deg', '--ry': '0deg' } as CSSProperties}
                     onPointerMove={moveJelly}
                     onPointerLeave={resetJelly}
@@ -411,8 +419,10 @@ export default function ComparisonWorkbench() {
                 </div>
 
                 <div className="weight-result">
-                  {experiment.mainWeight ? <strong>{formatSeconds(experiment.mainWeight)}</strong> : <strong>12/70</strong>}
-                  {delta !== undefined ? <span className={delta <= 0 ? 'faster' : 'slower'}>{delta > 0 ? '+' : ''}{delta.toFixed(1)}%</span> : <span className="partial">未完成</span>}
+                  <strong>{experiment.status === 'complete' ? formatSeconds(experiment.total) : `T+${formatSeconds(experiment.total)}`}</strong>
+                  {delta !== undefined
+                    ? <span className={delta <= 0 ? 'faster' : 'slower'}>{delta > 0 ? '+' : ''}{delta.toFixed(1)}%</span>
+                    : <span className={experiment.status === 'partial' ? 'partial' : 'evidence-gap'}>{experiment.status === 'partial' ? '未完成' : '证据残缺'}</span>}
                 </div>
               </article>
             );

@@ -1,6 +1,7 @@
 export type NodeKind = 'start' | 'progress' | 'rank' | 'mtp' | 'ready' | 'open';
 export type LinkKind = 'sequence' | 'branch' | 'join';
 export type LinkOrigin = 'observed' | 'declared' | 'inferred' | 'fallback';
+export type RunStatus = 'complete' | 'partial' | 'evidence-gap';
 
 export interface TimeNode {
   id: string;
@@ -30,7 +31,8 @@ export interface RealExperiment {
   date: string;
   total: number;
   mainWeight?: number;
-  complete: boolean;
+  status: RunStatus;
+  statusLabel: string;
   source: string;
   nodes: TimeNode[];
   links: TimeLink[];
@@ -54,7 +56,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-21 15:29',
     total: 1500,
     mainWeight: 1163.48,
-    complete: true,
+    status: 'complete',
+    statusLabel: '已完成 · 服务就绪',
     source: 'model-load-benchmark/runs/deepseek-v4-flash-load-20260821/service/rank-000.log',
     nodes: [
       { id: 'a-engine', label: '引擎启动', time: 0, kind: 'start', detail: 'EngineCore 开始初始化', locator: 'L103' },
@@ -84,7 +87,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-21 19:48',
     total: 1437,
     mainWeight: 1177.04,
-    complete: true,
+    status: 'complete',
+    statusLabel: '已完成 · 服务就绪',
     source: 'model-load-benchmark/runs/deepseek-v4-flash-load-20260821/service/rank-000.log',
     nodes: [
       { id: 'b-engine', label: '引擎启动', time: 0, kind: 'start', detail: 'EngineCore 开始初始化', locator: 'L1275' },
@@ -114,7 +118,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-22 15:40',
     total: 367,
     mainWeight: 238.27,
-    complete: false,
+    status: 'evidence-gap',
+    statusLabel: '证据残缺 · 缺服务终点',
     source: 'deepseek-load-analysis/runs/dsv4-dp1-load-20260822/service/rank-000.log',
     nodes: [
       { id: 'd-engine', label: '引擎启动', time: 0, kind: 'start', detail: 'EngineCore 开始初始化', locator: 'L37' },
@@ -138,7 +143,8 @@ export const realExperiments: RealExperiment[] = [
     config: 'TP8 · DP2 · EP · 运行未完成',
     date: '08-22 16:57',
     total: 280,
-    complete: false,
+    status: 'partial',
+    statusLabel: '未完成 · 停于 12/70',
     source: 'deepseek-load-analysis/runs/dsv4-dp2-tp8-prefetch-20260822-r2/service/rank-000.log',
     nodes: [
       { id: 'p-engine', label: '引擎启动', time: 0, kind: 'start', detail: 'EngineCore 开始初始化', locator: 'L63' },
@@ -159,7 +165,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-24 11:33',
     total: 310,
     mainWeight: 53.31,
-    complete: true,
+    status: 'complete',
+    statusLabel: '已完成 · 两节点就绪',
     source: 'deepseek-load-analysis/runs/dsv4-ramdisk-cold-dp2tp8-20260824/service/rank-{000,001}.log',
     nodes: [
       { id: 'c-engine', label: '引擎启动', time: 0, kind: 'start', detail: '两个节点开始 EngineCore 初始化', locator: 'L48' },
@@ -189,7 +196,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-24 10:42',
     total: 314,
     mainWeight: 51.75,
-    complete: true,
+    status: 'complete',
+    statusLabel: '已完成 · 两节点就绪',
     source: 'deepseek-load-analysis/runs/dsv4-ramdisk-dp2tp8-20260824/service/rank-{000,001}.log',
     nodes: [
       { id: 'w-engine', label: '引擎启动', time: 0, kind: 'start', detail: '两个节点开始 EngineCore 初始化', locator: 'L48' },
@@ -219,7 +227,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-24 13:08',
     total: 1447,
     mainWeight: 72.71,
-    complete: true,
+    status: 'complete',
+    statusLabel: '已完成 · API 验证',
     source: 'deepseek-load-analysis/runs/{stage-glm52-w8a8-ramdisk-1500g-cold,glm52-w8a8-ramdisk-1500g-dp2tp16}-20260824',
     nodes: [
       { id: 'gc-stage-start', label: '预置开始', time: 0, kind: 'start', detail: '两个节点从 DTFS 冷读模型并写入 RAM Disk', locator: 'stage rank-000 L1' },
@@ -256,7 +265,8 @@ export const realExperiments: RealExperiment[] = [
     date: '08-24 13:41',
     total: 484,
     mainWeight: 40,
-    complete: true,
+    status: 'complete',
+    statusLabel: '已完成 · API 验证',
     source: 'deepseek-load-analysis/runs/glm52-w8a8-ramdisk-1500g-dp2tp16-warm-20260824/service/rank-{000,001}.log',
     nodes: [
       { id: 'gw-vllm', label: 'vLLM 启动', time: 0, kind: 'start', detail: '复用 RAM Disk 模型副本，重新启动 vLLM', locator: '模型加载速度实验 L210–222' },
