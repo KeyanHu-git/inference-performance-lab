@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, FileUp, SlidersHorizontal, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useMemo, useRef, useState } from 'react';
-import { baselineWeight, formatSeconds, RealExperiment, realExperiments, realLogCount, TimeNode } from './comparison-model';
+import { baselineWeight, formatSeconds, RealExperiment, realExperiments, realLogCount, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type ParsedLine = { line: string; index: number; time?: number };
@@ -82,6 +82,13 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
     complete: Boolean(ready),
     source: file.name,
     nodes,
+    links: nodes.slice(1).map((node, index) => ({
+      id: `local-${order}-relation-${index}`,
+      from: nodes[index].id,
+      to: node.id,
+      kind: 'sequence',
+      origin: 'inferred',
+    })),
   };
 }
 
@@ -102,12 +109,53 @@ function resetJelly(event: ReactPointerEvent<HTMLDivElement>) {
   event.currentTarget.style.setProperty('--rx', '0deg');
 }
 
-function NodeMarker({ node, duration, onSelect }: { node: TimeNode; duration: number; onSelect: (node: TimeNode, anchor: Selection['anchor']) => void }) {
+function nodeLaneY(node: TimeNode) {
+  if (node.lane === 0) return 14;
+  if (node.lane === 1) return 36;
+  return 25;
+}
+
+function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, duration: number) {
+  const source = nodes.get(link.from);
+  const target = nodes.get(link.to);
+  if (!source || !target) return '';
+  const x1 = Math.min(99.4, (source.time / duration) * 100);
+  const x2 = Math.min(99.4, (target.time / duration) * 100);
+  const y1 = nodeLaneY(source);
+  const y2 = nodeLaneY(target);
+  if (y1 === y2) return `M ${x1} ${y1} L ${x2} ${y2}`;
+  const bend = Math.max(0.8, Math.min(3.2, (x2 - x1) * 0.28));
+  if (link.kind === 'branch') return `M ${x1} ${y1} L ${x1 + bend} ${y1} C ${x1 + bend * 1.35} ${y1} ${x2 - bend * 0.7} ${y2} ${x2} ${y2}`;
+  return `M ${x1} ${y1} C ${x1 + bend * 0.7} ${y1} ${x2 - bend * 1.35} ${y2} ${x2 - bend} ${y2} L ${x2} ${y2}`;
+}
+
+function RelationLayer({ experiment, selectedNodeId }: { experiment: RealExperiment; selectedNodeId?: string }) {
+  const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
+  return (
+    <svg className="relation-layer" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true">
+      {experiment.links.map((link) => {
+        const active = selectedNodeId === link.from || selectedNodeId === link.to;
+        const dimmed = Boolean(selectedNodeId) && !active;
+        return (
+          <path
+            key={link.id}
+            className={`relation-link relation-${link.kind} origin-${link.origin}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}`}
+            d={relationPath(link, nodes, experiment.total)}
+            vectorEffect="non-scaling-stroke"
+          />
+        );
+      })}
+    </svg>
+  );
+}
+
+function NodeMarker({ node, duration, selected, onSelect }: { node: TimeNode; duration: number; selected: boolean; onSelect: (node: TimeNode, anchor: Selection['anchor']) => void }) {
   const position = Math.min(99.4, (node.time / duration) * 100);
+  const laneClass = node.lane === undefined ? 'lane-main' : `lane-${node.lane}`;
   return (
     <button
-      className={`embedded-node node-${node.kind} lane-${node.lane ?? 0}`}
-      style={{ left: `${position}%` }}
+      className={`embedded-node node-${node.kind} ${laneClass}${selected ? ' is-selected' : ''}`}
+      style={{ left: `${position}%`, '--node-y': `${nodeLaneY(node)}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
@@ -132,9 +180,23 @@ function describeNode(node: TimeNode) {
   }
   if (node.kind === 'progress' || node.kind === 'open') return `${node.detail.replace('Safetensors ', '')} 个权重分片已完成读取。`;
   if (node.kind === 'rank') return `${node.label}加载完成，${node.detail.replace('主权重 ', '耗时 ')}。`;
-  if (node.kind === 'mtp') return 'MTP 补充权重加载完成。';
+  if (node.kind === 'mtp' && node.label.includes('MTP')) return 'MTP 补充权重加载完成。';
   if (node.kind === 'ready') return '引擎初始化完成，服务进入可用状态。';
   return node.detail;
+}
+
+function describeRelations(experiment: RealExperiment, node: TimeNode) {
+  const nodeNames = new Map(experiment.nodes.map((item) => [item.id, item.label]));
+  const incoming = experiment.links.filter((link) => link.to === node.id);
+  const outgoing = experiment.links.filter((link) => link.from === node.id);
+  if (!incoming.length && !outgoing.length) return '独立时间段；未确认与相邻节点的衔接关系。';
+
+  const relationMark = (kind: TimeLink['kind']) => kind === 'branch' ? '↗' : kind === 'join' ? '↘' : '→';
+  const parts = [
+    ...incoming.map((link) => `${nodeNames.get(link.from)} ${relationMark(link.kind)} 当前节点`),
+    ...outgoing.map((link) => `当前节点 ${relationMark(link.kind)} ${nodeNames.get(link.to)}`),
+  ];
+  return `关系：${parts.join('；')}`;
 }
 
 export default function ComparisonWorkbench() {
@@ -276,7 +338,8 @@ export default function ComparisonWorkbench() {
                     onPointerLeave={resetJelly}
                   >
                     <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-specular" />
-                    {experiment.nodes.map((node) => <NodeMarker key={node.id} node={node} duration={experiment.total} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />)}
+                    <RelationLayer experiment={experiment} selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined} />
+                    {experiment.nodes.map((node) => <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />)}
                   </div>
                 </div>
 
@@ -299,6 +362,7 @@ export default function ComparisonWorkbench() {
           <button className="popover-close" onClick={() => setSelected(null)} aria-label="关闭"><X size={13} /></button>
           <strong>{selected.node.label}<span>T+{formatSeconds(selected.node.time)}</span></strong>
           <p>{describeNode(selected.node)}</p>
+          <p className="popover-relation">{describeRelations(selected.experiment, selected.node)}</p>
         </aside>
       )}
 
