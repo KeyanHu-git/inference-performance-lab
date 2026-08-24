@@ -1,16 +1,26 @@
 'use client';
 
 import { Check, ChevronDown, FileUp, SlidersHorizontal, X } from 'lucide-react';
-import { ChangeEvent, CSSProperties, PointerEvent, useMemo, useRef, useState } from 'react';
+import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useMemo, useRef, useState } from 'react';
 import { baselineWeight, formatSeconds, RealExperiment, realExperiments, TimeNode } from './comparison-model';
 
-type Selection = { experiment: RealExperiment; node: TimeNode };
+type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type ParsedLine = { line: string; index: number; time?: number };
 
 function lineTime(line: string) {
   const match = line.match(/(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
   if (!match) return undefined;
   return Date.UTC(2026, Number(match[1]) - 1, Number(match[2]), Number(match[3]), Number(match[4]), Number(match[5])) / 1000;
+}
+
+function detectModel(text: string, fileName: string) {
+  const sample = `${fileName}\n${text.slice(0, 20000)}`;
+  if (/DeepSeek[-_ ]?V?4/i.test(sample)) return 'DeepSeek-V4';
+  const glm = sample.match(/\bGLM[-_ ]?\d+(?:\.\d+)?(?:[-_][A-Za-z0-9.]+)?/i);
+  if (glm) return glm[0].replace('_', '-').toUpperCase();
+  const qwen = sample.match(/\bQwen[-_ ]?[A-Za-z0-9.]+/i);
+  if (qwen) return qwen[0].replace('_', '-');
+  return '未识别模型';
 }
 
 function parseLog(text: string, file: File, order: number): RealExperiment | null {
@@ -63,6 +73,7 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
   return {
     id: `local-${Date.now()}-${order}`,
     name: short,
+    model: detectModel(text, file.name),
     shortName: short,
     config: `手工导入 · ${file.name}`,
     date: stamp,
@@ -74,7 +85,7 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
   };
 }
 
-function moveJelly(event: PointerEvent<HTMLDivElement>) {
+function moveJelly(event: ReactPointerEvent<HTMLDivElement>) {
   const box = event.currentTarget.getBoundingClientRect();
   const x = (event.clientX - box.left) / box.width;
   const y = (event.clientY - box.top) / box.height;
@@ -84,26 +95,46 @@ function moveJelly(event: PointerEvent<HTMLDivElement>) {
   event.currentTarget.style.setProperty('--rx', `${(0.5 - y) * 1.8}deg`);
 }
 
-function resetJelly(event: PointerEvent<HTMLDivElement>) {
+function resetJelly(event: ReactPointerEvent<HTMLDivElement>) {
   event.currentTarget.style.setProperty('--mx', '42%');
   event.currentTarget.style.setProperty('--my', '8%');
   event.currentTarget.style.setProperty('--ry', '0deg');
   event.currentTarget.style.setProperty('--rx', '0deg');
 }
 
-function NodeMarker({ node, duration, onSelect }: { node: TimeNode; duration: number; onSelect: (node: TimeNode) => void }) {
+function NodeMarker({ node, duration, onSelect }: { node: TimeNode; duration: number; onSelect: (node: TimeNode, anchor: Selection['anchor']) => void }) {
   const position = Math.min(99.4, (node.time / duration) * 100);
   return (
     <button
       className={`embedded-node node-${node.kind} lane-${node.lane ?? 0}`}
       style={{ left: `${position}%` }}
-      onClick={(event) => { event.stopPropagation(); onSelect(node); }}
+      onClick={(event) => {
+        event.stopPropagation();
+        const rect = event.currentTarget.getBoundingClientRect();
+        const tooltipWidth = 248;
+        const left = Math.max(8, Math.min(window.innerWidth - tooltipWidth - 8, rect.left + rect.width / 2 - tooltipWidth / 2));
+        const above = rect.top > 150;
+        onSelect(node, { left, top: above ? rect.top - 7 : rect.bottom + 7, above });
+      }}
       aria-label={`${node.label}，${formatSeconds(node.time)}，${node.detail}`}
       title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail}`}
     >
       <span>{node.label}</span>
     </button>
   );
+}
+
+function describeNode(node: TimeNode) {
+  if (node.label === '引擎启动') return '推理引擎开始初始化。';
+  if (node.label === '权重开始') {
+    const workers = node.detail.match(/\d+/)?.[0];
+    return workers ? `${workers} 个并行 Worker 开始读取模型权重。` : '开始读取模型权重。';
+  }
+  if (node.kind === 'progress' || node.kind === 'open') return `${node.detail.replace('Safetensors ', '')} 个权重分片已完成读取。`;
+  if (node.kind === 'rank') return `${node.label}加载完成，${node.detail.replace('主权重 ', '耗时 ')}。`;
+  if (node.kind === 'mtp') return 'MTP 补充权重加载完成。';
+  if (node.kind === 'ready') return '引擎初始化完成，服务进入可用状态。';
+  return node.detail;
 }
 
 export default function ComparisonWorkbench() {
@@ -113,6 +144,7 @@ export default function ComparisonWorkbench() {
   const [baseline, setBaseline] = useState('dtfs-a');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importNote, setImportNote] = useState('');
+  const [labelWidth, setLabelWidth] = useState(162);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const visibleExperiments = useMemo(() => experiments.filter((item) => visibleIds.includes(item.id)), [experiments, visibleIds]);
@@ -133,6 +165,21 @@ export default function ComparisonWorkbench() {
     }
   }
 
+  function startColumnResize(event: ReactPointerEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = labelWidth;
+    const move = (moveEvent: globalThis.PointerEvent) => setLabelWidth(Math.max(118, Math.min(300, startWidth + moveEvent.clientX - startX)));
+    const stop = () => {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', stop);
+      document.body.style.cursor = '';
+    };
+    document.body.style.cursor = 'col-resize';
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', stop);
+  }
+
   async function importLogs(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     const parsed = (await Promise.all(files.map(async (file, index) => parseLog(await file.text(), file, index)))).filter((item): item is RealExperiment => Boolean(item));
@@ -146,12 +193,8 @@ export default function ComparisonWorkbench() {
     event.target.value = '';
   }
 
-  const sourceLabel = selected?.experiment.source.includes('/')
-    ? `/models/wangakang/KeyanHu-workspace/${selected.experiment.source}`
-    : selected?.experiment.source;
-
   return (
-    <main className="compare-app">
+    <main className="compare-app" style={{ '--run-column': `${labelWidth}px` } as CSSProperties}>
       <header className="compare-header">
         <div className="compare-title"><span className="mark"><span /></span><h1>模型加载对比</h1></div>
         <div className="header-count"><strong>{visibleExperiments.length}</strong> 个实验<span>{7 + importedCount} 个日志</span></div>
@@ -174,7 +217,7 @@ export default function ComparisonWorkbench() {
                     const checked = visibleIds.includes(experiment.id);
                     return (
                       <button className={checked ? 'picker-item checked' : 'picker-item'} key={experiment.id} onClick={() => toggleExperiment(experiment.id)}>
-                        <span className="check-box">{checked && <Check size={11} />}</span><span>{experiment.shortName}</span>
+                        <span className="check-box">{checked && <Check size={11} />}</span><span><strong>{experiment.model}</strong><small>{experiment.shortName}</small></span>
                       </button>
                     );
                   })}
@@ -188,13 +231,13 @@ export default function ComparisonWorkbench() {
 
       <section className="comparison-board">
         <div className="axis-row">
-          <span className="axis-label">RUN</span>
+          <span className="axis-label">实验<button className="column-resizer" onPointerDown={startColumnResize} onDoubleClick={() => setLabelWidth(162)} aria-label="调整实验列宽度" title="拖动调整列宽，双击恢复" /></span>
           <div className="shared-axis">{ticks.map((tick) => <span key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }}>{formatSeconds(tick)}</span>)}</div>
           <span className="axis-metric">权重</span>
         </div>
 
         <div className="experiment-list">
-          {visibleExperiments.map((experiment, index) => {
+          {visibleExperiments.map((experiment) => {
             const width = (experiment.total / maximumTime) * 100;
             const delta = experiment.mainWeight && referenceWeight ? ((experiment.mainWeight - referenceWeight) / referenceWeight) * 100 : undefined;
             return (
@@ -205,8 +248,7 @@ export default function ComparisonWorkbench() {
                 title={`${experiment.name} · ${experiment.config} · 双击设为基线`}
               >
                 <div className="experiment-name">
-                  <span className="run-index">{String(index + 1).padStart(2, '0')}</span>
-                  <strong>{experiment.shortName}</strong>
+                  <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span></div>
                   {baseline === experiment.id && <span className="base-dot" title="当前基线" />}
                 </div>
 
@@ -219,7 +261,7 @@ export default function ComparisonWorkbench() {
                     onPointerLeave={resetJelly}
                   >
                     <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-specular" />
-                    {experiment.nodes.map((node) => <NodeMarker key={node.id} node={node} duration={experiment.total} onSelect={(value) => setSelected({ experiment, node: value })} />)}
+                    {experiment.nodes.map((node) => <NodeMarker key={node.id} node={node} duration={experiment.total} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />)}
                   </div>
                 </div>
 
@@ -235,11 +277,13 @@ export default function ComparisonWorkbench() {
       </section>
 
       {selected && (
-        <aside className="node-popover">
+        <aside
+          className={`node-popover ${selected.anchor.above ? 'popover-above' : 'popover-below'}`}
+          style={{ left: selected.anchor.left, top: selected.anchor.top, transform: selected.anchor.above ? 'translateY(-100%)' : undefined }}
+        >
           <button className="popover-close" onClick={() => setSelected(null)} aria-label="关闭"><X size={13} /></button>
-          <strong>{selected.node.label}<span>{formatSeconds(selected.node.time)}</span></strong>
-          <p>{selected.node.detail}</p>
-          <code>{sourceLabel}:{selected.node.locator}</code>
+          <strong>{selected.node.label}<span>T+{formatSeconds(selected.node.time)}</span></strong>
+          <p>{describeNode(selected.node)}</p>
         </aside>
       )}
 

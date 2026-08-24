@@ -13,6 +13,7 @@ export interface TimeNode {
 export interface RealExperiment {
   id: string;
   name: string;
+  model: string;
   shortName: string;
   config: string;
   date: string;
@@ -30,6 +31,7 @@ export const realExperiments: RealExperiment[] = [
   {
     id: 'dtfs-a',
     name: 'DTFS · DP2 / 第一次',
+    model: 'DeepSeek-V4',
     shortName: 'DTFS · DP2-A',
     config: 'TP8 · DP2 · EP · vLLM 0.25.1',
     date: '08-21 15:29',
@@ -50,6 +52,7 @@ export const realExperiments: RealExperiment[] = [
   {
     id: 'dtfs-b',
     name: 'DTFS · DP2 / 第二次',
+    model: 'DeepSeek-V4',
     shortName: 'DTFS · DP2-B',
     config: 'TP8 · DP2 · EP · vLLM 0.25.1',
     date: '08-21 19:48',
@@ -70,6 +73,7 @@ export const realExperiments: RealExperiment[] = [
   {
     id: 'dtfs-dp1',
     name: 'DTFS · DP1',
+    model: 'DeepSeek-V4',
     shortName: 'DTFS · DP1',
     config: 'TP8 · DP1 · EP · vLLM 0.13.0',
     date: '08-22 15:40',
@@ -88,6 +92,7 @@ export const realExperiments: RealExperiment[] = [
   {
     id: 'prefetch',
     name: 'DTFS · Prefetch',
+    model: 'DeepSeek-V4',
     shortName: 'DTFS · Prefetch',
     config: 'TP8 · DP2 · EP · 运行未完成',
     date: '08-22 16:57',
@@ -103,6 +108,7 @@ export const realExperiments: RealExperiment[] = [
   {
     id: 'ram-cold',
     name: 'RAM Disk · 冷缓存',
+    model: 'DeepSeek-V4',
     shortName: 'RAM · 冷缓存',
     config: 'TP8 · DP2 · EP · 双节点关键路径',
     date: '08-24 11:33',
@@ -123,6 +129,7 @@ export const realExperiments: RealExperiment[] = [
   {
     id: 'ram-warm',
     name: 'RAM Disk · 热缓存',
+    model: 'DeepSeek-V4',
     shortName: 'RAM · 热缓存',
     config: 'TP8 · DP2 · EP · 双节点关键路径',
     date: '08-24 10:42',
