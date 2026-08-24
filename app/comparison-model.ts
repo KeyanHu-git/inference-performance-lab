@@ -26,6 +26,7 @@ export interface RealExperiment {
 
 export const maximumTime = 1500;
 export const baselineWeight = 1163.48;
+export const realLogCount = 13;
 
 export const realExperiments: RealExperiment[] = [
   {
@@ -145,6 +146,52 @@ export const realExperiments: RealExperiment[] = [
       { id: 'w-dp0', label: 'DP0 权重', time: 158, kind: 'rank', lane: 1, detail: '节点0主权重 51.75 s', locator: 'rank-000 L596–600' },
       { id: 'w-mtp', label: 'MTP 权重', time: 190, kind: 'mtp', detail: '较慢节点MTP完成', locator: 'L735–737' },
       { id: 'w-ready', label: '服务就绪', time: 314, kind: 'ready', detail: '较慢节点 Engine 初始化完成', locator: 'rank-000 L817–819' },
+    ],
+  },
+  {
+    id: 'glm-ram-cold',
+    name: 'RAM Disk · 冷启动',
+    model: 'GLM-5.2 W8A8',
+    shortName: 'RAM · 冷启动',
+    config: 'TP16 · DP2 · EP · 32 NPU · 冷预置全链路',
+    date: '08-24 13:08',
+    total: 1447,
+    mainWeight: 72.71,
+    complete: true,
+    source: 'deepseek-load-analysis/runs/{stage-glm52-w8a8-ramdisk-1500g-cold,glm52-w8a8-ramdisk-1500g-dp2tp16}-20260824',
+    nodes: [
+      { id: 'gc-stage-start', label: '预置开始', time: 0, kind: 'start', detail: '两个节点从 DTFS 冷读模型并写入 RAM Disk', locator: 'stage rank-000 L1' },
+      { id: 'gc-stage-end', label: '预置完成', time: 752, kind: 'start', detail: '关键路径节点完成 743.10 GiB 模型预置', locator: 'stage rank-000 L3' },
+      { id: 'gc-vllm', label: 'vLLM 启动', time: 861, kind: 'start', detail: '跨节点 vLLM 服务开始启动', locator: '模型加载速度实验 L198–200' },
+      { id: 'gc-engine', label: '引擎初始化', time: 930, kind: 'start', detail: '两个 DP 实例开始建立 EngineCore', locator: 'service rank-{000,001} L63/L49' },
+      { id: 'gc-load', label: '权重开始', time: 1113, kind: 'start', detail: '32 个 Worker 从 RAM Disk 开始加载主权重', locator: 'service rank-{000,001} L572/L484' },
+      { id: 'gc-dp0', label: 'DP0 权重', time: 1196, kind: 'rank', lane: 0, detail: 'DP0 主权重 65.72 s', locator: 'service rank-000 L802' },
+      { id: 'gc-dp1', label: 'DP1 权重', time: 1203, kind: 'rank', lane: 1, detail: 'DP1 主权重 72.71 s', locator: 'service rank-001 L537' },
+      { id: 'gc-mtp', label: 'MTP 权重', time: 1224, kind: 'mtp', detail: '较慢节点 MTP 权重 1.52 s', locator: 'service rank-001 L637' },
+      { id: 'gc-graph', label: '图捕获', time: 1411, kind: 'mtp', detail: '两个节点完成 NPU Graph 捕获，均耗时 137 s', locator: 'service rank-{000,001} L1076/L784' },
+      { id: 'gc-ready', label: '服务就绪', time: 1447, kind: 'ready', detail: 'API 就绪；健康检查与模型列表验证通过', locator: '模型加载速度实验 L198–201' },
+    ],
+  },
+  {
+    id: 'glm-ram-warm',
+    name: 'RAM Disk · 热启动',
+    model: 'GLM-5.2 W8A8',
+    shortName: 'RAM · 热启动',
+    config: 'TP16 · DP2 · EP · 32 NPU · 已预置',
+    date: '08-24 13:41',
+    total: 484,
+    mainWeight: 40,
+    complete: true,
+    source: 'deepseek-load-analysis/runs/glm52-w8a8-ramdisk-1500g-dp2tp16-warm-20260824/service/rank-{000,001}.log',
+    nodes: [
+      { id: 'gw-vllm', label: 'vLLM 启动', time: 0, kind: 'start', detail: '复用 RAM Disk 模型副本，重新启动 vLLM', locator: '模型加载速度实验 L210–222' },
+      { id: 'gw-engine', label: '引擎初始化', time: 38, kind: 'start', detail: '两个 DP 实例开始建立 EngineCore', locator: 'service rank-{000,001} L63/L49' },
+      { id: 'gw-load', label: '权重开始', time: 215, kind: 'start', detail: '32 个 Worker 从 RAM Disk 开始加载主权重', locator: 'service rank-{000,001} L570/L481' },
+      { id: 'gw-dp0', label: 'DP0 权重', time: 271, kind: 'rank', lane: 0, detail: 'DP0 主权重 39.73 s', locator: 'service rank-000 L801' },
+      { id: 'gw-dp1', label: 'DP1 权重', time: 271, kind: 'rank', lane: 1, detail: 'DP1 主权重 40.00 s', locator: 'service rank-001 L537' },
+      { id: 'gw-mtp', label: 'MTP 权重', time: 293, kind: 'mtp', detail: '较慢节点 MTP 权重 0.39 s', locator: 'service rank-000 L926' },
+      { id: 'gw-graph', label: '图捕获', time: 448, kind: 'mtp', detail: '两个节点完成 NPU Graph 捕获，均耗时 120 s', locator: 'service rank-{000,001} L1080/L812' },
+      { id: 'gw-ready', label: '服务就绪', time: 484, kind: 'ready', detail: 'API 就绪；健康检查与模型列表验证通过', locator: '模型加载速度实验 L222' },
     ],
   },
 ];
