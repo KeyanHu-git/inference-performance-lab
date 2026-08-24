@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: '模型加载实验对比',
-  description: 'DeepSeek 模型加载实验时间对比。',
+  description: '面向不同模型与加载方案的实验时间对比。',
 };
 
 export default function RootLayout({
