@@ -2,7 +2,7 @@
 
 import { Check, ChevronDown, FileUp, SlidersHorizontal, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useMemo, useRef, useState } from 'react';
-import { baselineWeight, formatSeconds, RealExperiment, realExperiments, TimeNode } from './comparison-model';
+import { baselineWeight, formatSeconds, RealExperiment, realExperiments, realLogCount, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type ParsedLine = { line: string; index: number; time?: number };
@@ -141,7 +141,10 @@ export default function ComparisonWorkbench() {
   const [experiments, setExperiments] = useState<RealExperiment[]>(realExperiments);
   const [visibleIds, setVisibleIds] = useState(realExperiments.map((item) => item.id));
   const [selected, setSelected] = useState<Selection | null>(null);
-  const [baseline, setBaseline] = useState('dtfs-a');
+  const [baselines, setBaselines] = useState<Record<string, string>>({
+    'DeepSeek-V4': 'dtfs-a',
+    'GLM-5.2 W8A8': 'glm-ram-cold',
+  });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importNote, setImportNote] = useState('');
   const [labelWidth, setLabelWidth] = useState(162);
@@ -153,15 +156,16 @@ export default function ComparisonWorkbench() {
     return Math.ceil(longest / 300) * 300;
   }, [visibleExperiments]);
   const ticks = useMemo(() => Array.from({ length: Math.floor(maximumTime / 300) + 1 }, (_, index) => index * 300), [maximumTime]);
-  const baselineExperiment = experiments.find((item) => item.id === baseline) ?? experiments[0];
-  const referenceWeight = baselineExperiment?.mainWeight ?? baselineWeight;
   const importedCount = Math.max(0, experiments.length - realExperiments.length);
+  const logCount = realLogCount + importedCount;
 
   function toggleExperiment(id: string) {
     const next = visibleIds.includes(id) ? visibleIds.filter((item) => item !== id) : [...visibleIds, id];
     setVisibleIds(next);
-    if (baseline === id && !next.includes(id)) {
-      setBaseline(experiments.find((item) => next.includes(item.id) && item.mainWeight)?.id ?? '');
+    const target = experiments.find((item) => item.id === id);
+    if (target && baselines[target.model] === id && !next.includes(id)) {
+      const replacement = experiments.find((item) => item.model === target.model && next.includes(item.id) && item.mainWeight);
+      setBaselines((current) => ({ ...current, [target.model]: replacement?.id ?? '' }));
     }
   }
 
@@ -186,6 +190,13 @@ export default function ComparisonWorkbench() {
     if (parsed.length) {
       setExperiments((current) => [...current, ...parsed]);
       setVisibleIds((current) => [...current, ...parsed.map((item) => item.id)]);
+      setBaselines((current) => {
+        const next = { ...current };
+        parsed.forEach((item) => {
+          if (!next[item.model] && item.mainWeight) next[item.model] = item.id;
+        });
+        return next;
+      });
       setImportNote(`已导入 ${parsed.length}/${files.length} 个日志`);
     } else if (files.length) {
       setImportNote('未识别到可定位的加载阶段');
@@ -197,7 +208,7 @@ export default function ComparisonWorkbench() {
     <main className="compare-app" style={{ '--run-column': `${labelWidth}px` } as CSSProperties}>
       <header className="compare-header">
         <div className="compare-title"><span className="mark"><span /></span><h1>模型加载对比</h1></div>
-        <div className="header-count"><strong>{visibleExperiments.length}</strong> 个实验<span>{7 + importedCount} 个日志</span></div>
+        <div className="header-count"><strong>{visibleExperiments.length}</strong> 个实验<span>{logCount} 个日志</span></div>
       </header>
 
       <section className="compare-toolbar">
@@ -239,17 +250,21 @@ export default function ComparisonWorkbench() {
         <div className="experiment-list">
           {visibleExperiments.map((experiment) => {
             const width = (experiment.total / maximumTime) * 100;
+            const referenceExperiment = experiments.find((item) => item.id === baselines[experiment.model])
+              ?? experiments.find((item) => item.model === experiment.model && item.mainWeight);
+            const referenceWeight = referenceExperiment?.mainWeight ?? baselineWeight;
             const delta = experiment.mainWeight && referenceWeight ? ((experiment.mainWeight - referenceWeight) / referenceWeight) * 100 : undefined;
+            const isBaseline = baselines[experiment.model] === experiment.id;
             return (
               <article
-                className={`experiment-row${baseline === experiment.id ? ' is-baseline' : ''}`}
+                className={`experiment-row${isBaseline ? ' is-baseline' : ''}`}
                 key={experiment.id}
-                onDoubleClick={() => experiment.mainWeight && setBaseline(experiment.id)}
-                title={`${experiment.name} · ${experiment.config} · 双击设为基线`}
+                onDoubleClick={() => experiment.mainWeight && setBaselines((current) => ({ ...current, [experiment.model]: experiment.id }))}
+                title={`${experiment.name} · ${experiment.config} · 双击设为该模型基线`}
               >
                 <div className="experiment-name">
                   <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span></div>
-                  {baseline === experiment.id && <span className="base-dot" title="当前基线" />}
+                  {isBaseline && <span className="base-dot" title="当前模型基线" />}
                 </div>
 
                 <div className="band-track">
@@ -289,7 +304,7 @@ export default function ComparisonWorkbench() {
 
       <footer className="compare-footer">
         <span>数据快照 <code>/models/wangakang/KeyanHu-workspace</code></span>
-        <span>2026-08-24 11:38 · {7 + importedCount} logs · {experiments.length} runs</span>
+        <span>2026-08-24 13:49 · {logCount} logs · {experiments.length} runs</span>
       </footer>
     </main>
   );
