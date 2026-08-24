@@ -5,6 +5,7 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useMemo,
 import { baselineWeight, formatSeconds, RealExperiment, realExperiments, realLogCount, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
+type RelationFocus = { experimentId: string; linkId: string } | null;
 type ParsedLine = { line: string; index: number; time?: number };
 
 function lineTime(line: string) {
@@ -129,32 +130,81 @@ function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, duration: nu
   return `M ${x1} ${y1} C ${x1 + bend * 0.7} ${y1} ${x2 - bend * 1.35} ${y2} ${x2 - bend} ${y2} L ${x2} ${y2}`;
 }
 
-function RelationLayer({ experiment, selectedNodeId }: { experiment: RealExperiment; selectedNodeId?: string }) {
+function RelationLayer({
+  experiment,
+  selectedNodeId,
+  focusedLinkId,
+  onLinkFocus,
+}: {
+  experiment: RealExperiment;
+  selectedNodeId?: string;
+  focusedLinkId?: string;
+  onLinkFocus: (linkId?: string) => void;
+}) {
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   return (
-    <svg className="relation-layer" viewBox="0 0 100 50" preserveAspectRatio="none" aria-hidden="true">
+    <svg className="relation-layer" viewBox="0 0 100 50" preserveAspectRatio="none" role="group" aria-label={`${experiment.shortName} 阶段关系`}>
       {experiment.links.map((link) => {
-        const active = selectedNodeId === link.from || selectedNodeId === link.to;
-        const dimmed = Boolean(selectedNodeId) && !active;
+        const interactive = link.interactive !== false;
+        const active = interactive && (focusedLinkId ? focusedLinkId === link.id : selectedNodeId === link.from || selectedNodeId === link.to);
+        const dimmed = interactive && Boolean(focusedLinkId || selectedNodeId) && !active;
+        const path = relationPath(link, nodes, experiment.total);
+        const source = nodes.get(link.from)?.label ?? link.from;
+        const target = nodes.get(link.to)?.label ?? link.to;
         return (
-          <path
-            key={link.id}
-            className={`relation-link relation-${link.kind} origin-${link.origin}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}`}
-            d={relationPath(link, nodes, experiment.total)}
-            vectorEffect="non-scaling-stroke"
-          />
+          <g key={link.id}>
+            <path
+              className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}`}
+              d={path}
+              vectorEffect="non-scaling-stroke"
+              aria-hidden="true"
+            />
+            {interactive && (
+              <path
+                className="relation-hit"
+                d={path}
+                vectorEffect="non-scaling-stroke"
+                tabIndex={0}
+                role="button"
+                aria-label={`${source} 至 ${target} 的时间关系`}
+                onPointerEnter={() => onLinkFocus(link.id)}
+                onPointerLeave={(event) => {
+                  if (document.activeElement !== event.currentTarget) onLinkFocus();
+                }}
+                onFocus={() => onLinkFocus(link.id)}
+                onBlur={() => onLinkFocus()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  event.currentTarget.focus();
+                  onLinkFocus(link.id);
+                }}
+              />
+            )}
+          </g>
         );
       })}
     </svg>
   );
 }
 
-function NodeMarker({ node, duration, selected, onSelect }: { node: TimeNode; duration: number; selected: boolean; onSelect: (node: TimeNode, anchor: Selection['anchor']) => void }) {
+function NodeMarker({
+  node,
+  duration,
+  selected,
+  relationState,
+  onSelect,
+}: {
+  node: TimeNode;
+  duration: number;
+  selected: boolean;
+  relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
+  onSelect: (node: TimeNode, anchor: Selection['anchor']) => void;
+}) {
   const position = Math.min(99.4, (node.time / duration) * 100);
   const laneClass = node.lane === undefined ? 'lane-main' : `lane-${node.lane}`;
   return (
     <button
-      className={`embedded-node node-${node.kind} ${laneClass}${selected ? ' is-selected' : ''}`}
+      className={`embedded-node node-${node.kind} ${laneClass} relation-${relationState}${selected ? ' is-selected' : ''}`}
       style={{ left: `${position}%`, '--node-y': `${nodeLaneY(node)}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
@@ -210,6 +260,7 @@ export default function ComparisonWorkbench() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importNote, setImportNote] = useState('');
   const [labelWidth, setLabelWidth] = useState(162);
+  const [relationFocus, setRelationFocus] = useState<RelationFocus>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const visibleExperiments = useMemo(() => experiments.filter((item) => visibleIds.includes(item.id)), [experiments, visibleIds]);
@@ -317,6 +368,9 @@ export default function ComparisonWorkbench() {
             const referenceWeight = referenceExperiment?.mainWeight ?? baselineWeight;
             const delta = experiment.mainWeight && referenceWeight ? ((experiment.mainWeight - referenceWeight) / referenceWeight) * 100 : undefined;
             const isBaseline = baselines[experiment.model] === experiment.id;
+            const focusedLink = relationFocus?.experimentId === experiment.id
+              ? experiment.links.find((link) => link.id === relationFocus.linkId)
+              : undefined;
             return (
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}`}
@@ -338,8 +392,21 @@ export default function ComparisonWorkbench() {
                     onPointerLeave={resetJelly}
                   >
                     <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-specular" />
-                    <RelationLayer experiment={experiment} selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined} />
-                    {experiment.nodes.map((node) => <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />)}
+                    <RelationLayer
+                      experiment={experiment}
+                      selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
+                      focusedLinkId={focusedLink?.id}
+                      onLinkFocus={(linkId) => setRelationFocus(linkId ? { experimentId: experiment.id, linkId } : null)}
+                    />
+                    {experiment.nodes.map((node) => {
+                      const hasInteractiveRelation = experiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
+                      const relationState = !hasInteractiveRelation
+                        ? 'unlinked'
+                        : focusedLink
+                          ? focusedLink.from === node.id || focusedLink.to === node.id ? 'endpoint' : 'dimmed'
+                          : 'idle';
+                      return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
+                    })}
                   </div>
                 </div>
 

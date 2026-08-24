@@ -18,6 +18,7 @@ export interface TimeLink {
   to: string;
   kind: LinkKind;
   origin: LinkOrigin;
+  interactive?: boolean;
 }
 
 export interface RealExperiment {
@@ -39,8 +40,8 @@ export const maximumTime = 1500;
 export const baselineWeight = 1163.48;
 export const realLogCount = 13;
 
-function relation(id: string, from: string, to: string, kind: LinkKind = 'sequence', origin: LinkOrigin = 'observed'): TimeLink {
-  return { id, from, to, kind, origin };
+function relation(id: string, from: string, to: string, kind: LinkKind = 'sequence', origin: LinkOrigin = 'observed', interactive = true): TimeLink {
+  return { id, from, to, kind, origin, interactive };
 }
 
 export const realExperiments: RealExperiment[] = [
