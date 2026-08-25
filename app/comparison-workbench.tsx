@@ -835,13 +835,14 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             const positionAt = lens?.positionAt ?? ((time: number) => Math.max(0, Math.min(100, (time / experiment.total) * 100)));
             const displayWidth = lens?.displayWidth ?? width;
             const expandedNodes = expandedLinkId ? segmentDetailNodes(experiment, expandedLinkId) : [];
+            const additionalExpandedNodes = expandedNodes.filter((node) => !experimentNodes.has(node.id));
             const expandedNodeIds = new Set(expandedNodes.map((node) => node.id));
             const expandedDetailLinks = expandedLinkId
               ? (experiment.detailLinks ?? []).filter((link) => expandedNodeIds.has(link.from) || expandedNodeIds.has(link.to))
               : [];
             const renderExperiment: RealExperiment = expandedNodes.length ? {
               ...experiment,
-              nodes: [...experiment.nodes, ...expandedNodes],
+              nodes: [...experiment.nodes, ...additionalExpandedNodes],
               links: [...experiment.links.filter((link) => link.id !== expandedLinkId), ...expandedDetailLinks],
             } : experiment;
             const laneY = createLaneLayout(renderExperiment);
