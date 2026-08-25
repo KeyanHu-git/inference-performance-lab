@@ -16,7 +16,7 @@ function evidenceLocator(node: SemanticNode, bundle: TimelineBundle) {
   }).join('；');
 }
 
-function projectNode(run: TimelineRun, node: SemanticNode, bundle: TimelineBundle): TimeNode {
+function projectNode(run: TimelineRun, node: SemanticNode, bundle: TimelineBundle, children: Map<string, string[]>): TimeNode {
   return {
     id: `${run.id}:${node.id}`,
     label: node.label,
@@ -28,16 +28,26 @@ function projectNode(run: TimelineRun, node: SemanticNode, bundle: TimelineBundl
     semanticKey: node.semanticKey,
     subjectRef: node.subjectRef,
     boundary: node.boundary,
+    start: node.start,
+    end: node.end ?? node.start,
+    semanticKind: node.kind,
+    importance: node.importance,
+    childIds: (children.get(node.id) ?? []).map((id) => `${run.id}:${id}`),
   };
 }
 
 export function experimentsFromTimelineBundle(bundle: TimelineBundle): RealExperiment[] {
   return bundle.runs.map((run) => {
     const byId = new Map(run.nodes.map((node) => [node.id, node]));
+    const children = new Map<string, string[]>();
+    run.nodes.forEach((node) => {
+      if (!node.parentId) return;
+      children.set(node.parentId, [...(children.get(node.parentId) ?? []), node.id]);
+    });
     const projected = new Set(run.projection.nodeIds);
     const relationIds = new Set(run.projection.relationIds);
-    const nodes = run.projection.nodeIds.map((id) => byId.get(id)).filter((node): node is SemanticNode => Boolean(node)).map((node) => projectNode(run, node, bundle));
-    const detailNodes = run.nodes.filter((node) => !projected.has(node.id) && node.kind !== 'run' && node.kind !== 'phase').map((node) => projectNode(run, node, bundle));
+    const nodes = run.projection.nodeIds.map((id) => byId.get(id)).filter((node): node is SemanticNode => Boolean(node)).map((node) => projectNode(run, node, bundle, children));
+    const detailNodes = run.nodes.filter((node) => !projected.has(node.id) && node.kind !== 'run').map((node) => projectNode(run, node, bundle, children));
     const links = run.relations.filter((relation) => relationIds.has(relation.id)).map((relation) => ({
       id: `${run.id}:${relation.id}`,
       from: `${run.id}:${relation.from}`,
@@ -45,12 +55,9 @@ export function experimentsFromTimelineBundle(bundle: TimelineBundle): RealExper
       kind: relation.kind,
       origin: relation.origin,
       interactive: true,
+      scopeNodeId: relation.scopeNodeId ? `${run.id}:${relation.scopeNodeId}` : undefined,
       detailNodeIds: relation.detailNodeIds?.map((id) => `${run.id}:${id}`),
     }));
-    const detailLinks = links.flatMap((link) => (link.detailNodeIds ?? []).flatMap((detailId, index) => ([
-      { id: `${link.id}:detail:${index}:in`, from: link.from, to: detailId, kind: 'branch' as const, origin: 'observed' as const, interactive: true },
-      { id: `${link.id}:detail:${index}:out`, from: detailId, to: link.to, kind: 'join' as const, origin: 'observed' as const, interactive: true },
-    ])));
     const normalized = normalizeExperiment({
       id: run.id,
       name: run.label,
@@ -64,7 +71,6 @@ export function experimentsFromTimelineBundle(bundle: TimelineBundle): RealExper
       nodes,
       links,
       detailNodes,
-      detailLinks,
     });
     return { ...normalized, status: run.status, statusLabel: run.statusLabel };
   });

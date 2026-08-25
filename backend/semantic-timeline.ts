@@ -28,6 +28,7 @@ export interface SemanticRelation {
   to: string;
   kind: 'sequence' | 'branch' | 'join';
   origin: 'observed' | 'declared' | 'inferred' | 'fallback';
+  scopeNodeId?: string;
   detailNodeIds?: string[];
 }
 

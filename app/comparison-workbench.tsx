@@ -1,6 +1,6 @@
 'use client';
 
-import { Bookmark, Check, ChevronDown, CircleHelp, FileUp, Pencil, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, CircleHelp, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
@@ -8,6 +8,7 @@ import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment,
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type RelationTarget = { experimentId: string; linkId: string; stageKey: string };
 type TimeLens = { start: number; end: number; startX: number; endX: number; factor: number; pointCount: number; displayWidth: number; positionAt: (time: number) => number };
+type ExpandedSegment = { linkId: string; scopeStack: string[] };
 type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
 type WorkspaceState = {
@@ -121,8 +122,9 @@ function resetJelly(event: ReactPointerEvent<HTMLDivElement>) {
 const MAIN_LANE_Y = 25;
 
 function branchOrder(node: TimeNode) {
-  const semantic = node.label.match(/(?:DP|节点)\s*[·:_-]?\s*(\d+)/i);
-  if (semantic) return Number(semantic[1]);
+  const dp = node.label.match(/(?:DP|节点)\s*[·:_-]?\s*(\d+)/i);
+  const tp = node.label.match(/TP\s*[·:_-]?\s*(\d+)/i);
+  if (dp || tp) return Number(dp?.[1] ?? 0) * 1000 + Number(tp?.[1] ?? 0);
   return node.lane ?? Number.MAX_SAFE_INTEGER;
 }
 
@@ -242,30 +244,49 @@ function gradientSlice(start: number, end: number) {
   return `linear-gradient(90deg, ${points.map((stop) => `${stop.color} ${((stop.at - safeStart) / (safeEnd - safeStart)) * 100}%`).join(', ')})`;
 }
 
-function segmentDetailNodes(experiment: RealExperiment, linkId: string) {
-  const link = experiment.links.find((item) => item.id === linkId);
-  if (!link) return [];
-  if (link.detailNodeIds?.length) {
-    const details = new Map((experiment.detailNodes ?? []).map((node) => [node.id, node]));
-    return link.detailNodeIds.map((id) => details.get(id)).filter((node): node is TimeNode => Boolean(node));
-  }
-  const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
-  const source = nodes.get(link.from);
-  const target = nodes.get(link.to);
-  if (!source || !target || source.time === target.time) return [];
-  const start = Math.min(source.time, target.time);
-  const end = Math.max(source.time, target.time);
-  return experiment.nodes.filter((node) => node.id !== source.id && node.id !== target.id && node.time > start && node.time < end);
+function allExperimentNodes(experiment: RealExperiment) {
+  return new Map([...experiment.nodes, ...(experiment.detailNodes ?? [])].map((node) => [node.id, node]));
 }
 
-function createTimeLens(experiment: RealExperiment, linkId: string | undefined, width: number, maximum: number): TimeLens | null {
+function directPathChild(scopeId: string, leafId: string, nodes: Map<string, TimeNode>) {
+  let current = nodes.get(leafId);
+  const visited = new Set<string>();
+  while (current?.parentId && !visited.has(current.id)) {
+    visited.add(current.id);
+    if (current.parentId === scopeId) return current;
+    current = nodes.get(current.parentId);
+  }
+  return undefined;
+}
+
+function segmentDetailNodes(experiment: RealExperiment, linkId: string, scopeOverride?: string) {
+  const link = experiment.links.find((item) => item.id === linkId);
+  if (!link) return [];
+  const nodes = allExperimentNodes(experiment);
+  if (scopeOverride) {
+    const scope = nodes.get(scopeOverride);
+    const relevant = (link.detailNodeIds ?? [])
+      .map((id) => directPathChild(scopeOverride, id, nodes))
+      .filter((node): node is TimeNode => Boolean(node));
+    if (relevant.length) return Array.from(new Map(relevant.map((node) => [node.id, node])).values());
+    return (scope?.childIds ?? []).map((id) => nodes.get(id)).filter((node): node is TimeNode => Boolean(node));
+  }
+  if (!link.detailNodeIds?.length) return [];
+  if (!link.scopeNodeId) return link.detailNodeIds.map((id) => nodes.get(id)).filter((node): node is TimeNode => Boolean(node));
+  const direct = link.detailNodeIds
+    .map((id) => directPathChild(link.scopeNodeId!, id, nodes))
+    .filter((node): node is TimeNode => Boolean(node));
+  return Array.from(new Map(direct.map((node) => [node.id, node])).values());
+}
+
+function createTimeLens(experiment: RealExperiment, linkId: string | undefined, scopeId: string | undefined, width: number, maximum: number): TimeLens | null {
   if (!linkId) return null;
   const link = experiment.links.find((item) => item.id === linkId);
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   const source = link ? nodes.get(link.from) : undefined;
   const target = link ? nodes.get(link.to) : undefined;
   if (!source || !target || source.time === target.time) return null;
-  const detailNodes = segmentDetailNodes(experiment, linkId);
+  const detailNodes = segmentDetailNodes(experiment, linkId, scopeId);
   if (!detailNodes.length) return null;
   const start = Math.min(source.time, target.time);
   const end = Math.max(source.time, target.time);
@@ -276,7 +297,6 @@ function createTimeLens(experiment: RealExperiment, linkId: string | undefined, 
   const spacingDemand = detailNodes.length * 2.4;
   const requiredSpan = Math.min(34, Math.max(6, labelDemand + spacingDemand));
   const extra = Math.max(0, requiredSpan - originalSpan);
-  if (extra < 0.75) return null;
   const displayWidth = width + extra;
   const positionAt = (time: number) => {
     const original = (time / maximum) * 100;
@@ -297,6 +317,49 @@ function createTimeLens(experiment: RealExperiment, linkId: string | undefined, 
     displayWidth,
     positionAt,
   };
+}
+
+function createDetailLinks(link: TimeLink, detailNodes: TimeNode[]): TimeLink[] {
+  if (!detailNodes.length) return [];
+  const multiple = detailNodes.length > 1;
+  return detailNodes.flatMap((node) => ([
+    {
+      id: `${link.id}:detail:${node.id}:in`,
+      from: link.from,
+      to: node.id,
+      kind: multiple ? 'branch' as const : 'sequence' as const,
+      origin: link.origin,
+      interactive: false,
+    },
+    {
+      id: `${link.id}:detail:${node.id}:out`,
+      from: node.id,
+      to: link.to,
+      kind: multiple ? 'join' as const : 'sequence' as const,
+      origin: link.origin,
+      interactive: false,
+    },
+  ]));
+}
+
+function selectVisibleLabels(nodes: TimeNode[], positionAt: (time: number) => number, laneY: Map<string, number>, zoom: number, selectedId?: string) {
+  const result = new Set<string>();
+  const accepted = new Map<number, Array<{ position: number; gap: number }>>();
+  const priority = (node: TimeNode) => node.id === selectedId ? 100 : node.importance === 'key' ? 80 : node.semanticKind === 'phase' ? 70 : node.importance === 'diagnostic' ? 45 : 20;
+  nodes
+    .slice()
+    .sort((left, right) => priority(right) - priority(left) || left.time - right.time || left.id.localeCompare(right.id))
+    .forEach((node) => {
+      const lane = Math.round(laneY.get(node.id) ?? MAIN_LANE_Y);
+      const position = positionAt(node.time);
+      const gap = Math.min(10, Math.max(2.3, node.label.length * 0.42)) / Math.sqrt(Math.max(1, zoom));
+      const peers = accepted.get(lane) ?? [];
+      if (peers.some((peer) => Math.abs(peer.position - position) < Math.max(peer.gap, gap))) return;
+      peers.push({ position, gap });
+      accepted.set(lane, peers);
+      result.add(node.id);
+    });
+  return result;
 }
 
 function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, laneY: Map<string, number>, positionAt: (time: number) => number) {
@@ -415,7 +478,10 @@ function NodeMarker({
   selected,
   stagePeer,
   relationState,
+  showLabel,
+  expandable,
   onSelect,
+  onDrill,
 }: {
   node: TimeNode;
   position: number;
@@ -423,12 +489,15 @@ function NodeMarker({
   selected: boolean;
   stagePeer: boolean;
   relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
+  showLabel: boolean;
+  expandable: boolean;
   onSelect: (node: TimeNode, anchor: Selection['anchor']) => void;
+  onDrill: (node: TimeNode) => void;
 }) {
   const edgeClass = position <= 1 ? 'edge-start' : position >= 88 ? 'edge-end' : '';
   return (
     <button
-      className={`embedded-node node-${node.kind} ${laneClass(y)} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}`}
+      className={`embedded-node node-${node.kind} ${laneClass(y)} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}${showLabel ? '' : ' is-label-hidden'}${expandable ? ' is-expandable' : ''}`}
       style={{ left: `${position}%`, '--node-y': `${y}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
@@ -438,8 +507,13 @@ function NodeMarker({
         const above = rect.top > 150;
         onSelect(node, { left, top: above ? rect.top - 7 : rect.bottom + 7, above });
       }}
+      onDoubleClick={(event) => {
+        if (!expandable) return;
+        event.stopPropagation();
+        onDrill(node);
+      }}
       aria-label={`${node.label}，${formatSeconds(node.time)}，${node.detail}`}
-      title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail}`}
+      title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail}${expandable ? ' · 双击展开下级节点' : ''}`}
     >
       <span>{node.label}</span>
     </button>
@@ -505,11 +579,14 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [labelWidth, setLabelWidth] = useState(162);
   const [hoveredRelation, setHoveredRelation] = useState<RelationTarget | null>(null);
   const [pinnedRelation, setPinnedRelation] = useState<RelationTarget | null>(null);
-  const [expandedSegments, setExpandedSegments] = useState<Record<string, string>>({});
+  const [expandedSegments, setExpandedSegments] = useState<Record<string, ExpandedSegment>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [preferences, setPreferences] = useState<ViewPreferences>(DEFAULT_PREFERENCES);
+  const [timelineScale, setTimelineScale] = useState(3);
+  const [viewport, setViewport] = useState({ left: 0, width: 100 });
   const fileInput = useRef<HTMLInputElement>(null);
+  const boardRef = useRef<HTMLElement>(null);
   const relationClickTimer = useRef<number | null>(null);
 
   useEffect(() => {
@@ -563,6 +640,23 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }, [expandedSegments]);
 
   useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const update = () => {
+      const scrollWidth = Math.max(board.clientWidth, board.scrollWidth);
+      setViewport({ left: (board.scrollLeft / scrollWidth) * 100, width: (board.clientWidth / scrollWidth) * 100 });
+    };
+    update();
+    board.addEventListener('scroll', update, { passive: true });
+    const observer = new ResizeObserver(update);
+    observer.observe(board);
+    return () => {
+      board.removeEventListener('scroll', update);
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
     if (!workspaceReady) return;
     const imported = experiments.filter((item) => !builtInExperiments.some((base) => base.id === item.id));
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds } satisfies WorkspaceState));
@@ -586,7 +680,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     const longest = Math.max(...visibleExperiments.map((item) => item.total), 300);
     return Math.ceil(longest / 300) * 300;
   }, [visibleExperiments]);
-  const ticks = useMemo(() => Array.from({ length: Math.floor(maximumTime / 300) + 1 }, (_, index) => index * 300), [maximumTime]);
+  const tickStep = timelineScale >= 5 ? 60 : timelineScale >= 2.5 ? 120 : 300;
+  const ticks = useMemo(() => Array.from({ length: Math.floor(maximumTime / tickStep) + 1 }, (_, index) => index * tickStep), [maximumTime, tickStep]);
   const importedCount = Math.max(0, experiments.length - builtInExperiments.length);
   const logCount = Math.max(realLogCount, backendEvidenceCount) + importedCount;
 
@@ -598,6 +693,40 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
       const replacement = experiments.find((item) => item.model === target.model && next.includes(item.id) && item.mainWeight);
       setBaselines((current) => ({ ...current, [target.model]: replacement?.id ?? '' }));
     }
+  }
+
+  function changeTimelineScale(nextValue: number) {
+    const board = boardRef.current;
+    const next = Math.max(1, Math.min(8, Number(nextValue.toFixed(1))));
+    const center = board ? (board.scrollLeft + board.clientWidth / 2) / Math.max(board.scrollWidth, 1) : 0.5;
+    setTimelineScale(next);
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      const current = boardRef.current;
+      if (!current) return;
+      current.scrollLeft = Math.max(0, center * current.scrollWidth - current.clientWidth / 2);
+      const scrollWidth = Math.max(current.clientWidth, current.scrollWidth);
+      setViewport({ left: (current.scrollLeft / scrollWidth) * 100, width: (current.clientWidth / scrollWidth) * 100 });
+    }));
+  }
+
+  function navigateMinimap(event: ReactPointerEvent<HTMLDivElement>) {
+    const track = event.currentTarget;
+    const move = (clientX: number) => {
+      const board = boardRef.current;
+      if (!board) return;
+      const rect = track.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      board.scrollLeft = Math.max(0, Math.min(board.scrollWidth - board.clientWidth, ratio * board.scrollWidth - board.clientWidth / 2));
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    move(event.clientX);
+    const onMove = (pointer: globalThis.PointerEvent) => move(pointer.clientX);
+    const onUp = () => {
+      track.removeEventListener('pointermove', onMove);
+      track.removeEventListener('pointerup', onUp);
+    };
+    track.addEventListener('pointermove', onMove);
+    track.addEventListener('pointerup', onUp);
   }
 
   function startColumnResize(event: ReactPointerEvent<HTMLButtonElement>) {
@@ -679,20 +808,53 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     }
     const experiment = experiments.find((item) => item.id === target.experimentId);
     const canExpand = Boolean(experiment && segmentDetailNodes(experiment, target.linkId).length);
-    const isExpanded = expandedSegments[target.experimentId] === target.linkId;
+    const isExpanded = expandedSegments[target.experimentId]?.linkId === target.linkId;
     if (!isExpanded && !canExpand) return;
     setExpandedSegments((current) => {
       const next = { ...current };
       if (isExpanded) delete next[target.experimentId];
-      else next[target.experimentId] = target.linkId;
+      else next[target.experimentId] = { linkId: target.linkId, scopeStack: [] };
       return next;
     });
     setPinnedRelation(isExpanded ? null : target);
     setHoveredRelation(null);
   }
 
+  function drillIntoNode(experimentId: string, node: TimeNode) {
+    if (!node.childIds?.length) return;
+    setExpandedSegments((current) => {
+      const expanded = current[experimentId];
+      if (!expanded) return current;
+      return { ...current, [experimentId]: { ...expanded, scopeStack: [...expanded.scopeStack, node.id] } };
+    });
+    setSelected(null);
+  }
+
+  function stepOutOfLens(experimentId: string) {
+    setExpandedSegments((current) => {
+      const expanded = current[experimentId];
+      if (!expanded) return current;
+      if (!expanded.scopeStack.length) {
+        const next = { ...current };
+        delete next[experimentId];
+        return next;
+      }
+      return { ...current, [experimentId]: { ...expanded, scopeStack: expanded.scopeStack.slice(0, -1) } };
+    });
+  }
+
+  function closeLens(experimentId: string) {
+    setExpandedSegments((current) => {
+      const next = { ...current };
+      delete next[experimentId];
+      return next;
+    });
+    setPinnedRelation(null);
+    setHoveredRelation(null);
+  }
+
   return (
-    <main className="compare-app" style={{ '--run-column': `${labelWidth}px` } as CSSProperties}>
+    <main className="compare-app" style={{ '--run-column': `${labelWidth}px`, '--timeline-width': `${timelineScale * 100}vw` } as CSSProperties}>
       <header className="compare-header">
         <div className="compare-title"><span className="mark"><span /></span><h1>模型加载对比</h1></div>
         <div className="header-count"><strong>{visibleExperiments.length}</strong> 个实验<span>{logCount} 个日志</span></div>
@@ -700,6 +862,20 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
 
       <section className="compare-toolbar">
         <div className="mode-title"><strong>实验时间轴</strong>{importNote && <span className="import-note">{importNote}</span>}</div>
+        <div className="timeline-navigation" aria-label="时间轴缩放与缩略图">
+          <div className="zoom-controls">
+            <button aria-label="缩小时间轴" title="缩小" onClick={() => changeTimelineScale(timelineScale - .5)} disabled={timelineScale <= 1}><Minus size={12} /></button>
+            <span>{timelineScale.toFixed(1)}×</span>
+            <button aria-label="放大时间轴" title="放大" onClick={() => changeTimelineScale(timelineScale + .5)} disabled={timelineScale >= 8}><Plus size={12} /></button>
+            <button aria-label="适应全部实验" title="适应全部实验" onClick={() => changeTimelineScale(1)}><Maximize2 size={11} /></button>
+          </div>
+          <div className="timeline-minimap" onPointerDown={navigateMinimap} role="group" aria-label={`时间轴缩略图，当前窗口起点 ${Math.round(viewport.left)}%`}>
+            <div className="minimap-runs">
+              {visibleExperiments.map((experiment, index) => <i key={experiment.id} style={{ top: `${((index + .5) / Math.max(1, visibleExperiments.length)) * 100}%`, width: `${(experiment.total / maximumTime) * 100}%` }} />)}
+            </div>
+            <span className="minimap-window" style={{ left: `${viewport.left}%`, width: `${viewport.width}%` }} />
+          </div>
+        </div>
         <div className="toolbar-actions">
           <input ref={fileInput} className="file-input" type="file" accept=".log,.txt,text/plain" multiple onChange={importLogs} />
           <div className="settings-wrap">
@@ -806,7 +982,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
         </div>
       </section>
 
-      <section className="comparison-board">
+      <section className="comparison-board" ref={boardRef}>
         <div className="axis-row">
           <span className="axis-label">实验<button className="column-resizer" onPointerDown={startColumnResize} onDoubleClick={() => setLabelWidth(162)} aria-label="调整实验列宽度" title="拖动调整列宽，双击恢复" /></span>
           <div className="shared-axis">{ticks.map((tick) => <span key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }}>{formatSeconds(tick)}</span>)}</div>
@@ -828,24 +1004,26 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             const focusedLinks = focusApplies && relationFocus
               ? experiment.links.filter((link) => preferences.syncStages ? linkStageKey(link, experimentNodes) === relationFocus.stageKey : link.id === relationFocus.linkId)
               : [];
-            const expandedLinkId = expandedSegments[experiment.id];
+            const expanded = expandedSegments[experiment.id];
+            const expandedLinkId = expanded?.linkId;
             const expandedLink = expandedLinkId ? experiment.links.find((link) => link.id === expandedLinkId) : undefined;
-            const expandedTarget = expandedLink ? { experimentId: experiment.id, linkId: expandedLink.id, stageKey: linkStageKey(expandedLink, experimentNodes) } : undefined;
-            const lens = createTimeLens(experiment, expandedLinkId, width, maximumTime);
+            const currentScopeId = expanded?.scopeStack.at(-1);
+            const semanticNodes = allExperimentNodes(experiment);
+            const currentScope = currentScopeId ? semanticNodes.get(currentScopeId) : expandedLink?.scopeNodeId ? semanticNodes.get(expandedLink.scopeNodeId) : undefined;
+            const lens = createTimeLens(experiment, expandedLinkId, currentScopeId, width, maximumTime);
             const positionAt = lens?.positionAt ?? ((time: number) => Math.max(0, Math.min(100, (time / experiment.total) * 100)));
             const displayWidth = lens?.displayWidth ?? width;
-            const expandedNodes = expandedLinkId ? segmentDetailNodes(experiment, expandedLinkId) : [];
+            const expandedNodes = expandedLinkId ? segmentDetailNodes(experiment, expandedLinkId, currentScopeId) : [];
             const additionalExpandedNodes = expandedNodes.filter((node) => !experimentNodes.has(node.id));
             const expandedNodeIds = new Set(expandedNodes.map((node) => node.id));
-            const expandedDetailLinks = expandedLinkId
-              ? (experiment.detailLinks ?? []).filter((link) => expandedNodeIds.has(link.from) || expandedNodeIds.has(link.to))
-              : [];
+            const expandedDetailLinks = expandedLink ? createDetailLinks(expandedLink, expandedNodes) : [];
             const renderExperiment: RealExperiment = expandedNodes.length ? {
               ...experiment,
               nodes: [...experiment.nodes, ...additionalExpandedNodes],
               links: [...experiment.links.filter((link) => link.id !== expandedLinkId), ...expandedDetailLinks],
             } : experiment;
             const laneY = createLaneLayout(renderExperiment);
+            const visibleLabels = selectVisibleLabels(renderExperiment.nodes, positionAt, laneY, timelineScale, selected?.experiment.id === experiment.id ? selected.node.id : undefined);
             return (
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}${lens ? ' has-time-lens' : ''}`}
@@ -901,11 +1079,16 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         <span
                           className="time-lens"
                           style={{ left: `${lens.startX}%`, width: `${lens.endX - lens.startX}%` }}
-                          onDoubleClick={(event) => { event.stopPropagation(); if (expandedTarget) handleRelationDoubleClick(expandedTarget); }}
-                          title="双击收起局部节点"
+                          onDoubleClick={(event) => { event.stopPropagation(); stepOutOfLens(experiment.id); }}
+                          title={expanded?.scopeStack.length ? '双击返回上一级' : '双击收起局部节点'}
                         >
                           <i className="lens-cut cut-start" /><i className="lens-cut cut-end" />
-                          <b>{lens.pointCount} 个细分节点 · ×{lens.factor.toFixed(1)}<button className="lens-close" aria-label="收起局部节点" title="收起" onClick={(event) => { event.stopPropagation(); if (expandedTarget) handleRelationDoubleClick(expandedTarget); }}><X size={8} /></button></b>
+                          <b>
+                            {expanded?.scopeStack.length ? <button className="lens-back" aria-label="返回上一级" title="返回上一级" onClick={(event) => { event.stopPropagation(); stepOutOfLens(experiment.id); }}>‹</button> : null}
+                            <span>{currentScope?.label ?? '细分节点'} · {lens.pointCount}</span>
+                            {lens.factor > 1.05 ? <em>×{lens.factor.toFixed(1)}</em> : null}
+                            <button className="lens-close" aria-label="关闭局部展开" title="关闭" onClick={(event) => { event.stopPropagation(); closeLens(experiment.id); }}><X size={8} /></button>
+                          </b>
                         </span>
                       )}
                       <RelationLayer
@@ -923,13 +1106,13 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         onLinkDoubleClick={handleRelationDoubleClick}
                       />
                       {renderExperiment.nodes.map((node) => {
-                        const hasInteractiveRelation = renderExperiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
+                        const hasInteractiveRelation = renderExperiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id)) || (expandedNodeIds.has(node.id) && Boolean(node.childIds?.length));
                         const relationState = !hasInteractiveRelation
                           ? 'unlinked'
                           : focusedLinks.length
                             ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
                             : 'idle';
-                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
+                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} showLabel={visibleLabels.has(node.id)} expandable={expandedNodeIds.has(node.id) && Boolean(node.childIds?.length)} onSelect={(value, anchor) => setSelected({ experiment: renderExperiment, node: value, anchor })} onDrill={(value) => drillIntoNode(experiment.id, value)} />;
                       })}
                     </div>
                   </div>

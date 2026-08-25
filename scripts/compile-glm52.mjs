@@ -156,25 +156,20 @@ node('service-ready', 'phase-service', 'service.verified', 'api', '首次 HTTP 2
 
 const defaultNodeIds = ['prestage-node-1', 'prestage-node-0', 'service-start', 'engine-start', 'weight-start', 'main-dp0', 'main-dp1', 'mtp-dp0', 'mtp-dp1', 'graph-start', 'graph-dp1', 'graph-dp0', 'engine-dp1', 'engine-dp0', 'service-ready'];
 const relations = [];
-const relation = (id, from, to, kind = 'sequence', origin = 'observed', explicitDetails) => {
-  const source = nodes.find((item) => item.id === from);
-  const target = nodes.find((item) => item.id === to);
-  const detailNodeIds = (explicitDetails ?? nodes
-    .filter((item) => !defaultNodeIds.includes(item.id) && item.kind !== 'run' && item.kind !== 'phase' && item.start > source.start && item.start < target.start)
-    .sort((left, right) => left.start - right.start || left.subjectRef.localeCompare(right.subjectRef))
-    .map((item) => item.id));
-  relations.push({ id, from, to, kind, origin, ...(detailNodeIds.length ? { detailNodeIds } : {}) });
+const relation = (id, from, to, kind = 'sequence', origin = 'observed', explicitDetails = [], scopeNodeId) => {
+  const detailNodeIds = explicitDetails;
+  relations.push({ id, from, to, kind, origin, ...(scopeNodeId ? { scopeNodeId } : {}), ...(detailNodeIds.length ? { detailNodeIds } : {}) });
 };
 const detailIds = (predicate) => nodes.filter((item) => predicate(item)).sort((left, right) => left.start - right.start || left.subjectRef.localeCompare(right.subjectRef)).map((item) => item.id);
 relation('r-prestage-0', 'prestage-node-1', 'prestage-node-0');
 relation('r-service-engine', 'service-start', 'engine-start');
-relation('r-engine-workers', 'engine-start', 'weight-start', 'sequence', 'observed', detailIds((item) => item.id.startsWith('worker-init-')));
-relation('r-weight-dp0', 'weight-start', 'main-dp0', 'branch', 'observed', detailIds((item) => item.id.startsWith('weight-worker-') && item.subjectRef.startsWith('dp:0/')));
-relation('r-weight-dp1', 'weight-start', 'main-dp1', 'branch', 'observed', detailIds((item) => item.id.startsWith('weight-worker-') && item.subjectRef.startsWith('dp:1/')));
-relation('r-dp0-mtp', 'main-dp0', 'mtp-dp0', 'sequence', 'observed', ['mtp-start-dp0']);
-relation('r-dp1-mtp', 'main-dp1', 'mtp-dp1', 'sequence', 'observed', ['mtp-start-dp1']);
-relation('r-mtp0-graph', 'mtp-dp0', 'graph-start', 'join', 'observed', detailIds((item) => (item.id.startsWith('compile-') || item.id === 'kv-dp0') && item.subjectRef === 'dp:0'));
-relation('r-mtp1-graph', 'mtp-dp1', 'graph-start', 'join', 'observed', detailIds((item) => (item.id.startsWith('compile-') || item.id === 'kv-dp1') && item.subjectRef === 'dp:1'));
+relation('r-engine-workers', 'engine-start', 'weight-start', 'sequence', 'observed', detailIds((item) => item.id.startsWith('worker-init-')), 'phase-workers');
+relation('r-weight-dp0', 'weight-start', 'main-dp0', 'branch', 'observed', detailIds((item) => item.id.startsWith('weight-worker-') && item.subjectRef.startsWith('dp:0/')), 'phase-main-dp0');
+relation('r-weight-dp1', 'weight-start', 'main-dp1', 'branch', 'observed', detailIds((item) => item.id.startsWith('weight-worker-') && item.subjectRef.startsWith('dp:1/')), 'phase-main-dp1');
+relation('r-dp0-mtp', 'main-dp0', 'mtp-dp0', 'sequence', 'observed', ['mtp-start-dp0'], 'phase-mtp-dp0');
+relation('r-dp1-mtp', 'main-dp1', 'mtp-dp1', 'sequence', 'observed', ['mtp-start-dp1'], 'phase-mtp-dp1');
+relation('r-mtp0-graph', 'mtp-dp0', 'graph-start', 'join', 'observed', detailIds((item) => (item.id.startsWith('compile-') || item.id === 'kv-dp0') && item.subjectRef === 'dp:0'), 'phase-engine');
+relation('r-mtp1-graph', 'mtp-dp1', 'graph-start', 'join', 'observed', detailIds((item) => (item.id.startsWith('compile-') || item.id === 'kv-dp1') && item.subjectRef === 'dp:1'), 'phase-engine');
 relation('r-graph-dp0', 'graph-start', 'graph-dp0', 'branch', 'inferred');
 relation('r-graph-dp1', 'graph-start', 'graph-dp1', 'branch', 'inferred');
 relation('r-graph-engine', 'graph-dp0', 'engine-dp0', 'join');

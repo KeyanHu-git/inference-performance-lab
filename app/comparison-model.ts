@@ -15,6 +15,11 @@ export interface TimeNode {
   semanticKey?: string;
   subjectRef?: string;
   boundary?: 'observed' | 'derived' | 'declared';
+  start?: number;
+  end?: number;
+  semanticKind?: 'run' | 'phase' | 'activity' | 'event';
+  importance?: 'key' | 'diagnostic' | 'raw';
+  childIds?: string[];
 }
 
 export interface TimeLink {
@@ -24,6 +29,7 @@ export interface TimeLink {
   kind: LinkKind;
   origin: LinkOrigin;
   interactive?: boolean;
+  scopeNodeId?: string;
   detailNodeIds?: string[];
 }
 
