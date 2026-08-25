@@ -40,7 +40,7 @@ export interface RealExperiment {
 
 export const maximumTime = 1500;
 export const baselineWeight = 1163.48;
-export const realLogCount = 13;
+export const realLogCount = 17;
 
 function relation(id: string, from: string, to: string, kind: LinkKind = 'sequence', origin: LinkOrigin = 'observed', interactive = true): TimeLink {
   return { id, from, to, kind, origin, interactive };
@@ -289,6 +289,50 @@ export const realExperiments: RealExperiment[] = [
       relation('gw-r7', 'gw-mtp0', 'gw-graph', 'join'),
       relation('gw-r8', 'gw-mtp1', 'gw-graph', 'join'),
       relation('gw-r9', 'gw-graph', 'gw-ready'),
+    ],
+  },
+  {
+    id: 'glm-p8-e2e-20260825',
+    name: 'P=8 预置 · 完整流程',
+    model: 'GLM-5.2 W8A8',
+    shortName: 'P=8 · 完整流程',
+    config: 'TP16 · DP2 · EP · 32 NPU · 双节点 P=8 预置',
+    date: '08-25 10:23',
+    total: 566.54,
+    mainWeight: 49.6,
+    status: 'complete',
+    statusLabel: '已完成 · 真实生成验证',
+    source: 'worker-fork-test/runs/{glm52-minimal-stage-20260825-01/prestage,glm52-minimal-service-20260825-01/service}/rank-{000,001}.log',
+    nodes: [
+      { id: 'gp-stage-start', label: 'P=8 预置', time: 0, kind: 'start', detail: '两个节点同时从共享存储预置模型，单节点并行度 P=8', locator: 'prestage rank-{000,001} L1' },
+      { id: 'gp-stage-dp1', label: '节点1预置', time: 143.37, kind: 'rank', lane: 1, detail: '节点1完成 743.10 GiB 预置，耗时 143.37 s', locator: 'prestage rank-001 L1' },
+      { id: 'gp-stage-dp0', label: '节点0预置', time: 156.95, kind: 'rank', lane: 0, detail: '节点0完成 743.10 GiB 预置；关键路径 156.95 s', locator: 'prestage rank-000 L1' },
+      { id: 'gp-vllm', label: 'vLLM 启动', time: 187.54, kind: 'start', detail: '预置结束约 31 s 后，两节点启动原 GLM-5.2 推理配置', locator: 'service rank-{000,001} L2' },
+      { id: 'gp-engine', label: 'Engine 初始化', time: 232.54, kind: 'start', detail: 'DP0、DP1 同时建立 EngineCore；TP16、DP2、EP', locator: 'service rank-000 L49 / rank-001 L40' },
+      { id: 'gp-load', label: '32 Worker 权重', time: 255.54, kind: 'start', detail: '32 个 Worker 进入模型加载，最早与最晚 Rank 相差约 1 s', locator: 'service rank-000 L292–333 / rank-001 L222–250' },
+      { id: 'gp-dp0', label: 'DP0 主权重', time: 319.54, kind: 'rank', lane: 0, detail: 'DP0 主权重读取耗时 47.10 s', locator: 'service rank-000 L533' },
+      { id: 'gp-dp1', label: 'DP1 主权重', time: 322.54, kind: 'rank', lane: 1, detail: 'DP1 主权重读取耗时 49.60 s', locator: 'service rank-001 L272' },
+      { id: 'gp-mtp0', label: 'MTP · DP0', time: 337.54, kind: 'mtp', lane: 0, detail: 'DP0 MTP 权重读取耗时 0.91 s', locator: 'service rank-000 L665' },
+      { id: 'gp-mtp1', label: 'MTP · DP1', time: 343.54, kind: 'mtp', lane: 1, detail: 'DP1 MTP 权重读取耗时 2.83 s', locator: 'service rank-001 L398' },
+      { id: 'gp-graph-start', label: 'Graph 开始', time: 389.54, kind: 'start', detail: '由 Graph 完成时间与日志记录的 138 s 耗时回推', locator: 'service rank-000 L808 / rank-001 L535' },
+      { id: 'gp-graph-end', label: 'Graph 完成', time: 527.54, kind: 'mtp', detail: '两个节点完成 NPU Graph 捕获，均耗时 138 s', locator: 'service rank-000 L808 / rank-001 L535' },
+      { id: 'gp-engine-ready', label: 'Engine 完成', time: 545.54, kind: 'mtp', detail: '较慢 DP0 的 Engine 初始化子流程耗时 206.13 s；两节点 KV Cache 均为 27.93 GiB', locator: 'service rank-000 L773/L876 / rank-001 L505/L607' },
+      { id: 'gp-ready', label: '首次 HTTP 200', time: 566.54, kind: 'ready', detail: '/health、/v1/models 与真实生成均验证为 HTTP 200；system_fingerprint 为 TP16-DP2-EP', locator: 'service rank-000 L955–960' },
+    ],
+    links: [
+      relation('gp-r1', 'gp-stage-start', 'gp-stage-dp0', 'branch'),
+      relation('gp-r2', 'gp-stage-start', 'gp-stage-dp1', 'branch'),
+      relation('gp-r3', 'gp-vllm', 'gp-engine'),
+      relation('gp-r4', 'gp-engine', 'gp-load'),
+      relation('gp-r5', 'gp-load', 'gp-dp0', 'branch'),
+      relation('gp-r6', 'gp-load', 'gp-dp1', 'branch'),
+      relation('gp-r7', 'gp-dp0', 'gp-mtp0'),
+      relation('gp-r8', 'gp-dp1', 'gp-mtp1'),
+      relation('gp-r9', 'gp-mtp0', 'gp-graph-start', 'join'),
+      relation('gp-r10', 'gp-mtp1', 'gp-graph-start', 'join'),
+      relation('gp-r11', 'gp-graph-start', 'gp-graph-end', 'sequence', 'inferred'),
+      relation('gp-r12', 'gp-graph-end', 'gp-engine-ready'),
+      relation('gp-r13', 'gp-engine-ready', 'gp-ready'),
     ],
   },
 ];
