@@ -59,3 +59,6 @@ body{overflow:hidden;background:var(--cmp-bg);font-size:12px}
 
 /* One coordinate system for ticks, bands, relations and event anchors. */
 .band-track{padding-left:0;padding-right:0}.jelly-shell{min-width:0}.embedded-node span,.embedded-node.lane-0 span,.embedded-node.lane-1 span,.embedded-node.node-progress.lane-main span,.embedded-node.node-ready span,.embedded-node.node-open span{top:calc(var(--node-y) - 5px)}.embedded-node span:before{content:"";position:absolute;right:100%;top:50%;width:6px;border-top:1px solid rgba(236,246,246,.48);transform:translateY(-50%)}.embedded-node.edge-end span,.embedded-node.node-ready span,.embedded-node.node-open span{left:auto;right:18px}.embedded-node.edge-end span:before,.embedded-node.node-ready span:before,.embedded-node.node-open span:before{right:auto;left:100%}
+
+/* Keep graph-editor lanes from changing timeline-node coordinates. */
+.embedded-node.lane-main{top:0;border-top:0}.graph-lane.graph-lane-a{top:24%}.graph-lane.graph-lane-main{top:50%;border-top-style:solid;border-top-color:rgba(104,232,220,.11)}.graph-lane.graph-lane-b{top:76%}
