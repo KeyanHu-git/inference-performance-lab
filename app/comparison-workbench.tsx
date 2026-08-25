@@ -6,7 +6,7 @@ import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
-type RelationFocus = { experimentId: string; linkId: string; stageKey: string } | null;
+type RelationTarget = { experimentId: string; linkId: string; stageKey: string };
 type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
 type WorkspaceState = {
@@ -158,20 +158,84 @@ function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, duration: nu
   return `M ${x1} ${y1} C ${x1 + bend * 0.7} ${y1} ${x2 - bend * 1.35} ${y2} ${x2 - bend} ${y2} L ${x2} ${y2}`;
 }
 
+function SegmentDetail({ experiment, linkId, onClose }: { experiment: RealExperiment; linkId: string; onClose: () => void }) {
+  const link = experiment.links.find((item) => item.id === linkId);
+  const nodeMap = new Map(experiment.nodes.map((node) => [node.id, node]));
+  const source = link ? nodeMap.get(link.from) : undefined;
+  const target = link ? nodeMap.get(link.to) : undefined;
+  if (!link || !source || !target) return null;
+
+  const start = Math.min(source.time, target.time);
+  const end = Math.max(source.time, target.time);
+  const span = Math.max(1, end - start);
+  const localNodes = experiment.nodes
+    .filter((node) => node.time >= start && node.time <= end)
+    .sort((a, b) => a.time - b.time || nodeLaneY(a) - nodeLaneY(b));
+  const localIds = new Set(localNodes.map((node) => node.id));
+  const localLinks = experiment.links.filter((item) => localIds.has(item.from) && localIds.has(item.to));
+  const localPosition = (node: TimeNode) => ((node.time - start) / span) * 100;
+  const localY = (node: TimeNode) => node.lane === 0 ? 22 : node.lane === 1 ? 50 : 36;
+  const localPath = (item: TimeLink) => {
+    const from = nodeMap.get(item.from);
+    const to = nodeMap.get(item.to);
+    if (!from || !to) return '';
+    const x1 = localPosition(from);
+    const x2 = localPosition(to);
+    const y1 = localY(from);
+    const y2 = localY(to);
+    if (y1 === y2) return `M ${x1} ${y1} L ${x2} ${y2}`;
+    return `M ${x1} ${y1} C ${x1 + 4} ${y1} ${x2 - 4} ${y2} ${x2} ${y2}`;
+  };
+
+  return (
+    <section className="segment-detail" aria-label={`${source.label}至${target.label}的局部时间关系`}>
+      <header>
+        <span><b>{source.label}</b><i>→</i><b>{target.label}</b></span>
+        <small>{formatSeconds(span)} · {localNodes.length} 个时间点</small>
+        <button onClick={onClose} aria-label="折叠该时间段"><X size={11} /></button>
+      </header>
+      <div className="segment-rail">
+        <svg viewBox="0 0 100 72" preserveAspectRatio="none" aria-hidden="true">
+          {localLinks.map((item) => <path key={item.id} className={`segment-link origin-${item.origin}`} d={localPath(item)} vectorEffect="non-scaling-stroke" />)}
+        </svg>
+        {localNodes.map((node) => (
+          <button
+            key={node.id}
+            className={`segment-node kind-${node.kind}`}
+            style={{ left: `${localPosition(node)}%`, top: `${localY(node)}px` }}
+            title={`${node.label} · T+${formatSeconds(node.time)} · ${node.detail}`}
+          >
+            <i />
+            <span>{node.label}<small>+{formatSeconds(node.time - start)}</small></span>
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function RelationLayer({
   experiment,
   selectedNodeId,
   focusedStageKey,
   focusedLinkId,
   showDurations,
-  onLinkFocus,
+  pinnedLinkId,
+  expandedLinkId,
+  onLinkHover,
+  onLinkClick,
+  onLinkDoubleClick,
 }: {
   experiment: RealExperiment;
   selectedNodeId?: string;
   focusedStageKey?: string;
   focusedLinkId?: string;
   showDurations: boolean;
-  onLinkFocus: (stageKey?: string, linkId?: string) => void;
+  pinnedLinkId?: string;
+  expandedLinkId?: string;
+  onLinkHover: (target?: RelationTarget) => void;
+  onLinkClick: (target: RelationTarget) => void;
+  onLinkDoubleClick: (target: RelationTarget) => void;
 }) {
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   return (
@@ -185,10 +249,11 @@ function RelationLayer({
           const path = relationPath(link, nodes, experiment.total);
           const source = nodes.get(link.from)?.label ?? link.from;
           const target = nodes.get(link.to)?.label ?? link.to;
+          const relationTarget = { experimentId: experiment.id, linkId: link.id, stageKey };
           return (
             <g key={link.id}>
               <path
-                className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}`}
+                className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}${pinnedLinkId === link.id ? ' is-pinned' : ''}${expandedLinkId === link.id ? ' is-expanded' : ''}`}
                 d={path}
                 vectorEffect="non-scaling-stroke"
                 aria-hidden="true"
@@ -200,17 +265,20 @@ function RelationLayer({
                   vectorEffect="non-scaling-stroke"
                   tabIndex={0}
                   role="button"
+                  aria-pressed={pinnedLinkId === link.id}
+                  aria-expanded={expandedLinkId === link.id}
                   aria-label={`${source} 至 ${target} 的时间关系`}
-                  onPointerEnter={() => onLinkFocus(stageKey, link.id)}
-                  onPointerLeave={(event) => {
-                    if (document.activeElement !== event.currentTarget) onLinkFocus();
-                  }}
-                  onFocus={() => onLinkFocus(stageKey, link.id)}
-                  onBlur={() => onLinkFocus()}
+                  onPointerEnter={() => onLinkHover(relationTarget)}
+                  onPointerLeave={() => onLinkHover()}
+                  onFocus={() => onLinkHover(relationTarget)}
+                  onBlur={() => onLinkHover()}
                   onClick={(event) => {
                     event.stopPropagation();
-                    event.currentTarget.focus();
-                    onLinkFocus(stageKey, link.id);
+                    onLinkClick(relationTarget);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.stopPropagation();
+                    onLinkDoubleClick(relationTarget);
                   }}
                 />
               )}
@@ -325,11 +393,14 @@ export default function ComparisonWorkbench() {
   const [editing, setEditing] = useState<RealExperiment | null>(null);
   const [currentExperimentId, setCurrentExperimentId] = useState(realExperiments[0]?.id ?? '');
   const [labelWidth, setLabelWidth] = useState(162);
-  const [relationFocus, setRelationFocus] = useState<RelationFocus>(null);
+  const [hoveredRelation, setHoveredRelation] = useState<RelationTarget | null>(null);
+  const [pinnedRelation, setPinnedRelation] = useState<RelationTarget | null>(null);
+  const [expandedSegments, setExpandedSegments] = useState<Record<string, string>>({});
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [preferences, setPreferences] = useState<ViewPreferences>(DEFAULT_PREFERENCES);
   const fileInput = useRef<HTMLInputElement>(null);
+  const relationClickTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const hydrate = window.setTimeout(() => {
@@ -357,6 +428,10 @@ export default function ComparisonWorkbench() {
       setWorkspaceReady(true);
     }, 0);
     return () => window.clearTimeout(hydrate);
+  }, []);
+
+  useEffect(() => () => {
+    if (relationClickTimer.current !== null) window.clearTimeout(relationClickTimer.current);
   }, []);
 
   useEffect(() => {
@@ -461,6 +536,30 @@ export default function ComparisonWorkbench() {
     setImportNote('已恢复全部实验');
   }
 
+  function handleRelationClick(target: RelationTarget) {
+    if (relationClickTimer.current !== null) window.clearTimeout(relationClickTimer.current);
+    relationClickTimer.current = window.setTimeout(() => {
+      setPinnedRelation((current) => current?.experimentId === target.experimentId && current.linkId === target.linkId ? null : target);
+      relationClickTimer.current = null;
+    }, 220);
+  }
+
+  function handleRelationDoubleClick(target: RelationTarget) {
+    if (relationClickTimer.current !== null) {
+      window.clearTimeout(relationClickTimer.current);
+      relationClickTimer.current = null;
+    }
+    const isExpanded = expandedSegments[target.experimentId] === target.linkId;
+    setExpandedSegments((current) => {
+      const next = { ...current };
+      if (isExpanded) delete next[target.experimentId];
+      else next[target.experimentId] = target.linkId;
+      return next;
+    });
+    setPinnedRelation(isExpanded ? null : target);
+    setHoveredRelation(null);
+  }
+
   return (
     <main className="compare-app" style={{ '--run-column': `${labelWidth}px` } as CSSProperties}>
       <header className="compare-header">
@@ -522,7 +621,9 @@ export default function ComparisonWorkbench() {
                   <div><i className="guide-gap"><b /><b /></i><span><strong>无连线</strong><small>仅表示时间先后，未定义直接流程关系</small></span></div>
                 </section>
                 <section className="guide-actions">
-                  <span><b>悬停连线</b> 查看并对比阶段</span>
+                  <span><b>悬停连线</b> 临时突出该阶段</span>
+                  <span><b>单击连线</b> 锁定或取消突出</span>
+                  <span><b>双击连线</b> 展开该段局部关系</span>
                   <span><b>点击节点</b> 查看时间与说明</span>
                   <span><b>右键实验</b> 编辑时间关系</span>
                 </section>
@@ -591,13 +692,15 @@ export default function ComparisonWorkbench() {
               : undefined;
             const isBaseline = baselines[experiment.model] === experiment.id;
             const experimentNodes = new Map(experiment.nodes.map((node) => [node.id, node]));
+            const relationFocus = pinnedRelation ?? hoveredRelation;
             const focusApplies = Boolean(relationFocus && (preferences.syncStages || relationFocus.experimentId === experiment.id));
             const focusedLinks = focusApplies && relationFocus
               ? experiment.links.filter((link) => preferences.syncStages ? linkStageKey(link, experimentNodes) === relationFocus.stageKey : link.id === relationFocus.linkId)
               : [];
+            const expandedLinkId = expandedSegments[experiment.id];
             return (
               <article
-                className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}`}
+                className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}${expandedLinkId ? ' has-expanded-segment' : ''}`}
                 key={experiment.id}
                 onContextMenu={(event) => {
                   event.preventDefault();
@@ -629,33 +732,40 @@ export default function ComparisonWorkbench() {
                   <span className="label-actions">{isBaseline && <i className="base-dot" title="当前模型基线" />}</span>
                 </div>
 
-                <div className="band-track">
-                  {ticks.map((tick) => <span className="track-grid" key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }} />)}
-                  <div
-                    className={`jelly-shell status-${experiment.status}`}
-                    style={{ width: `${width}%`, '--band-scale': `${10000 / width}%`, '--mx': '42%', '--my': '8%' } as CSSProperties}
-                    onPointerMove={moveJelly}
-                    onPointerLeave={resetJelly}
-                  >
-                    <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-caustic" /><span className="jelly-specular" />
-                    <RelationLayer
-                      experiment={experiment}
-                      selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
-                      focusedStageKey={focusApplies && preferences.syncStages ? relationFocus?.stageKey : undefined}
-                      focusedLinkId={focusApplies && !preferences.syncStages ? relationFocus?.linkId : undefined}
-                      showDurations={preferences.showDurations}
-                      onLinkFocus={(stageKey, linkId) => setRelationFocus(stageKey && linkId ? { experimentId: experiment.id, linkId, stageKey } : null)}
-                    />
-                    {experiment.nodes.map((node) => {
-                      const hasInteractiveRelation = experiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
-                      const relationState = !hasInteractiveRelation
-                        ? 'unlinked'
-                        : focusedLinks.length
-                          ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
-                          : 'idle';
-                      return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
-                    })}
+                <div className="band-column">
+                  <div className="band-track">
+                    {ticks.map((tick) => <span className="track-grid" key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }} />)}
+                    <div
+                      className={`jelly-shell status-${experiment.status}`}
+                      style={{ width: `${width}%`, '--band-scale': `${10000 / width}%`, '--mx': '42%', '--my': '8%' } as CSSProperties}
+                      onPointerMove={moveJelly}
+                      onPointerLeave={resetJelly}
+                    >
+                      <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-caustic" /><span className="jelly-specular" />
+                      <RelationLayer
+                        experiment={experiment}
+                        selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
+                        focusedStageKey={focusApplies && preferences.syncStages ? relationFocus?.stageKey : undefined}
+                        focusedLinkId={focusApplies && !preferences.syncStages ? relationFocus?.linkId : undefined}
+                        showDurations={preferences.showDurations}
+                        pinnedLinkId={pinnedRelation?.experimentId === experiment.id ? pinnedRelation.linkId : undefined}
+                        expandedLinkId={expandedLinkId}
+                        onLinkHover={(target) => setHoveredRelation(target ?? null)}
+                        onLinkClick={handleRelationClick}
+                        onLinkDoubleClick={handleRelationDoubleClick}
+                      />
+                      {experiment.nodes.map((node) => {
+                        const hasInteractiveRelation = experiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
+                        const relationState = !hasInteractiveRelation
+                          ? 'unlinked'
+                          : focusedLinks.length
+                            ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
+                            : 'idle';
+                        return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
+                      })}
+                    </div>
                   </div>
+                  {expandedLinkId && <SegmentDetail experiment={experiment} linkId={expandedLinkId} onClose={() => { setExpandedSegments((current) => { const next = { ...current }; delete next[experiment.id]; return next; }); if (pinnedRelation?.experimentId === experiment.id && pinnedRelation.linkId === expandedLinkId) setPinnedRelation(null); }} />}
                 </div>
 
                 <div className="weight-result">
