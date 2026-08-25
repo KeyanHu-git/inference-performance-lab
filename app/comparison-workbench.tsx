@@ -445,7 +445,7 @@ export default function ComparisonWorkbench() {
 
       <footer className="compare-footer">
         <span>数据快照 <code>/models/wangakang/KeyanHu-workspace</code></span>
-        <span>2026-08-24 13:49 · {logCount} logs · {experiments.length} runs</span>
+        <span>2026-08-25 10:33 · {logCount} logs · {experiments.length} runs</span>
       </footer>
     </main>
   );
