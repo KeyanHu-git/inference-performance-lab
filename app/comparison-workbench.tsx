@@ -7,7 +7,7 @@ import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment,
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type RelationTarget = { experimentId: string; linkId: string; stageKey: string };
-type TimeLens = { start: number; end: number; startX: number; endX: number; factor: number; displayWidth: number; positionAt: (time: number) => number };
+type TimeLens = { start: number; end: number; startX: number; endX: number; factor: number; pointCount: number; displayWidth: number; positionAt: (time: number) => number };
 type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
 type WorkspaceState = {
@@ -181,6 +181,18 @@ function gradientSlice(start: number, end: number) {
   return `linear-gradient(90deg, ${points.map((stop) => `${stop.color} ${((stop.at - safeStart) / (safeEnd - safeStart)) * 100}%`).join(', ')})`;
 }
 
+function segmentDetailNodes(experiment: RealExperiment, linkId: string) {
+  const link = experiment.links.find((item) => item.id === linkId);
+  if (!link) return [];
+  const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
+  const source = nodes.get(link.from);
+  const target = nodes.get(link.to);
+  if (!source || !target || source.time === target.time) return [];
+  const start = Math.min(source.time, target.time);
+  const end = Math.max(source.time, target.time);
+  return experiment.nodes.filter((node) => node.id !== source.id && node.id !== target.id && node.time > start && node.time < end);
+}
+
 function createTimeLens(experiment: RealExperiment, linkId: string | undefined, width: number, maximum: number): TimeLens | null {
   if (!linkId) return null;
   const link = experiment.links.find((item) => item.id === linkId);
@@ -188,12 +200,18 @@ function createTimeLens(experiment: RealExperiment, linkId: string | undefined, 
   const source = link ? nodes.get(link.from) : undefined;
   const target = link ? nodes.get(link.to) : undefined;
   if (!source || !target || source.time === target.time) return null;
+  const detailNodes = segmentDetailNodes(experiment, linkId);
+  if (!detailNodes.length) return null;
   const start = Math.min(source.time, target.time);
   const end = Math.max(source.time, target.time);
   const startTrack = (start / maximum) * 100;
   const endTrack = (end / maximum) * 100;
   const originalSpan = endTrack - startTrack;
-  const extra = Math.max(10, Math.min(20, width * 0.32));
+  const labelDemand = detailNodes.reduce((sum, node) => sum + Math.min(8, Math.max(2.5, node.label.length * 0.48)), 0);
+  const spacingDemand = detailNodes.length * 2.4;
+  const requiredSpan = Math.min(34, Math.max(6, labelDemand + spacingDemand));
+  const extra = Math.max(0, requiredSpan - originalSpan);
+  if (extra < 0.75) return null;
   const displayWidth = width + extra;
   const positionAt = (time: number) => {
     const original = (time / maximum) * 100;
@@ -210,6 +228,7 @@ function createTimeLens(experiment: RealExperiment, linkId: string | undefined, 
     startX: positionAt(start),
     endX: positionAt(end),
     factor: (originalSpan + extra) / originalSpan,
+    pointCount: detailNodes.length,
     displayWidth,
     positionAt,
   };
@@ -565,7 +584,10 @@ export default function ComparisonWorkbench() {
       window.clearTimeout(relationClickTimer.current);
       relationClickTimer.current = null;
     }
+    const experiment = experiments.find((item) => item.id === target.experimentId);
+    const canExpand = Boolean(experiment && segmentDetailNodes(experiment, target.linkId).length);
     const isExpanded = expandedSegments[target.experimentId] === target.linkId;
+    if (!isExpanded && !canExpand) return;
     setExpandedSegments((current) => {
       const next = { ...current };
       if (isExpanded) delete next[target.experimentId];
@@ -770,7 +792,7 @@ export default function ComparisonWorkbench() {
                       <span className="jelly-depth" /><span className="jelly-caustic" /><span className="jelly-specular" />
                       {lens && (
                         <span className="time-lens" style={{ left: `${lens.startX}%`, width: `${lens.endX - lens.startX}%` }} aria-hidden="true">
-                          <i className="lens-cut cut-start" /><i className="lens-cut cut-end" /><b>局部 ×{lens.factor.toFixed(1)}</b>
+                          <i className="lens-cut cut-start" /><i className="lens-cut cut-end" /><b>{lens.pointCount} 个细分节点 · ×{lens.factor.toFixed(1)}</b>
                         </span>
                       )}
                       <RelationLayer
