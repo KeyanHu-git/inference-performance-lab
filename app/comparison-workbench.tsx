@@ -552,6 +552,17 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }, []);
 
   useEffect(() => {
+    const collapseLens = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !Object.keys(expandedSegments).length) return;
+      setExpandedSegments({});
+      setPinnedRelation(null);
+      setHoveredRelation(null);
+    };
+    window.addEventListener('keydown', collapseLens);
+    return () => window.removeEventListener('keydown', collapseLens);
+  }, [expandedSegments]);
+
+  useEffect(() => {
     if (!workspaceReady) return;
     const imported = experiments.filter((item) => !builtInExperiments.some((base) => base.id === item.id));
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds } satisfies WorkspaceState));
@@ -818,6 +829,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
               ? experiment.links.filter((link) => preferences.syncStages ? linkStageKey(link, experimentNodes) === relationFocus.stageKey : link.id === relationFocus.linkId)
               : [];
             const expandedLinkId = expandedSegments[experiment.id];
+            const expandedLink = expandedLinkId ? experiment.links.find((link) => link.id === expandedLinkId) : undefined;
+            const expandedTarget = expandedLink ? { experimentId: experiment.id, linkId: expandedLink.id, stageKey: linkStageKey(expandedLink, experimentNodes) } : undefined;
             const lens = createTimeLens(experiment, expandedLinkId, width, maximumTime);
             const positionAt = lens?.positionAt ?? ((time: number) => Math.max(0, Math.min(100, (time / experiment.total) * 100)));
             const displayWidth = lens?.displayWidth ?? width;
@@ -884,8 +897,14 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                       ) : <span className="jelly-color" />}
                       <span className="jelly-depth" /><span className="jelly-caustic" /><span className="jelly-specular" />
                       {lens && (
-                        <span className="time-lens" style={{ left: `${lens.startX}%`, width: `${lens.endX - lens.startX}%` }} aria-hidden="true">
-                          <i className="lens-cut cut-start" /><i className="lens-cut cut-end" /><b>{lens.pointCount} 个细分节点 · ×{lens.factor.toFixed(1)}</b>
+                        <span
+                          className="time-lens"
+                          style={{ left: `${lens.startX}%`, width: `${lens.endX - lens.startX}%` }}
+                          onDoubleClick={(event) => { event.stopPropagation(); if (expandedTarget) handleRelationDoubleClick(expandedTarget); }}
+                          title="双击收起局部节点"
+                        >
+                          <i className="lens-cut cut-start" /><i className="lens-cut cut-end" />
+                          <b>{lens.pointCount} 个细分节点 · ×{lens.factor.toFixed(1)}<button className="lens-close" aria-label="收起局部节点" title="收起" onClick={(event) => { event.stopPropagation(); if (expandedTarget) handleRelationDoubleClick(expandedTarget); }}><X size={8} /></button></b>
                         </span>
                       )}
                       <RelationLayer
