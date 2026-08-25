@@ -1,12 +1,20 @@
 'use client';
 
-import { Check, ChevronDown, FileUp, SlidersHorizontal, X } from 'lucide-react';
-import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useMemo, useRef, useState } from 'react';
-import { formatSeconds, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
+import { Bookmark, Check, ChevronDown, CircleHelp, FileUp, Pencil, RotateCcw, Search, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { ExperimentEditor } from './experiment-editor';
+import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
 type RelationFocus = { experimentId: string; linkId: string } | null;
 type ParsedLine = { line: string; index: number; time?: number };
+type WorkspaceState = {
+  imported: RealExperiment[];
+  overrides: Record<string, RealExperiment>;
+  removedIds: string[];
+};
+
+const WORKSPACE_KEY = 'chronoscope.workspace.v1';
 
 function lineTime(line: string) {
   const match = line.match(/(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
@@ -60,7 +68,7 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
   };
   add(engine, '引擎启动', 'start', 'EngineCore 开始初始化');
   add(load, '权重开始', 'start', '开始加载模型权重');
-  if (progress) add(progress.item, `权重 ${progress.done}/${progress.total}`, 'progress', `Safetensors ${progress.percent}%`);
+  if (progress) add(progress.item, `权重 ${progress.done}/${progress.total}`, main ? 'progress' : 'open', `Safetensors ${progress.percent}%`);
   const mainWeight = Number(main?.line.match(/Loading weights took\s+([\d.]+)/i)?.[1] ?? 0) || undefined;
   add(main, '主权重', 'rank', mainWeight ? `主权重 ${mainWeight.toFixed(2)} s` : '主权重完成');
   add(mtp, 'MTP 权重', 'mtp', 'MTP 权重完成');
@@ -71,13 +79,7 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
   const total = Math.max(1, nodes.at(-1)?.time ?? mainWeight ?? 1);
   const short = file.name.replace(/\.(log|txt)$/i, '').slice(0, 20);
   const stamp = engine.line.match(/(\d{2}-\d{2}\s+\d{2}:\d{2})/)?.[1] ?? '本地导入';
-  const status: RunStatus = ready ? 'complete' : main ? 'evidence-gap' : progress ? 'partial' : 'evidence-gap';
-  const statusLabel = status === 'complete'
-    ? '已完成 · 服务就绪'
-    : status === 'partial'
-      ? `未完成 · 停于 ${progress?.done ?? '?'}\/${progress?.total ?? '?'}`
-      : '证据残缺 · 缺服务终点';
-  return {
+  const evidence: ExperimentEvidence = {
     id: `local-${Date.now()}-${order}`,
     name: short,
     model: detectModel(text, file.name),
@@ -86,8 +88,6 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
     date: stamp,
     total,
     mainWeight,
-    status,
-    statusLabel,
     source: file.name,
     nodes,
     links: nodes.slice(1).map((node, index) => ({
@@ -98,6 +98,7 @@ function parseLog(text: string, file: File, order: number): RealExperiment | nul
       origin: 'inferred',
     })),
   };
+  return normalizeExperiment(evidence);
 }
 
 function moveJelly(event: ReactPointerEvent<HTMLDivElement>) {
@@ -255,6 +256,9 @@ function describeRelations(experiment: RealExperiment, node: TimeNode) {
 export default function ComparisonWorkbench() {
   const [experiments, setExperiments] = useState<RealExperiment[]>(realExperiments);
   const [visibleIds, setVisibleIds] = useState(realExperiments.map((item) => item.id));
+  const [removedIds, setRemovedIds] = useState<string[]>([]);
+  const [overrides, setOverrides] = useState<Record<string, RealExperiment>>({});
+  const [workspaceReady, setWorkspaceReady] = useState(false);
   const [selected, setSelected] = useState<Selection | null>(null);
   const [baselines, setBaselines] = useState<Record<string, string>>({
     'DeepSeek-V4': 'dtfs-a',
@@ -262,11 +266,55 @@ export default function ComparisonWorkbench() {
   });
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importNote, setImportNote] = useState('');
+  const [query, setQuery] = useState('');
+  const [modelFilter, setModelFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | RunStatus>('all');
+  const [manageMode, setManageMode] = useState(false);
+  const [removeSelection, setRemoveSelection] = useState<string[]>([]);
+  const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
+  const [noteDraft, setNoteDraft] = useState('');
+  const [editing, setEditing] = useState<RealExperiment | null>(null);
   const [labelWidth, setLabelWidth] = useState(162);
   const [relationFocus, setRelationFocus] = useState<RelationFocus>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  const visibleExperiments = useMemo(() => experiments.filter((item) => visibleIds.includes(item.id)), [experiments, visibleIds]);
+  useEffect(() => {
+    const hydrate = window.setTimeout(() => {
+      try {
+        const stored = JSON.parse(localStorage.getItem(WORKSPACE_KEY) ?? 'null') as WorkspaceState | null;
+        if (stored) {
+          const restoredOverrides = stored.overrides ?? {};
+          const builtIns = realExperiments.map((item) => normalizeExperiment(restoredOverrides[item.id] ?? item));
+          const imported = (stored.imported ?? []).map((item) => normalizeExperiment(restoredOverrides[item.id] ?? item));
+          const restored = [...builtIns, ...imported.filter((item) => !builtIns.some((base) => base.id === item.id))];
+          setExperiments(restored);
+          setOverrides(restoredOverrides);
+          setRemovedIds(stored.removedIds ?? []);
+          setVisibleIds(restored.filter((item) => !(stored.removedIds ?? []).includes(item.id)).map((item) => item.id));
+        }
+      } catch {
+        setImportNote('本机修订记录无法读取，已使用原始解析结果');
+      }
+      setWorkspaceReady(true);
+    }, 0);
+    return () => window.clearTimeout(hydrate);
+  }, []);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    const imported = experiments.filter((item) => !realExperiments.some((base) => base.id === item.id));
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds } satisfies WorkspaceState));
+  }, [experiments, overrides, removedIds, workspaceReady]);
+
+  const activeExperiments = useMemo(() => experiments.filter((item) => !removedIds.includes(item.id)), [experiments, removedIds]);
+  const visibleExperiments = useMemo(() => activeExperiments.filter((item) => visibleIds.includes(item.id)), [activeExperiments, visibleIds]);
+  const filteredExperiments = useMemo(() => activeExperiments.filter((item) => {
+    const haystack = `${item.model} ${item.shortName} ${item.config} ${item.note ?? ''}`.toLowerCase();
+    return (modelFilter === 'all' || item.model === modelFilter)
+      && (statusFilter === 'all' || item.status === statusFilter)
+      && (!query.trim() || haystack.includes(query.trim().toLowerCase()));
+  }), [activeExperiments, modelFilter, query, statusFilter]);
+  const models = useMemo(() => Array.from(new Set(activeExperiments.map((item) => item.model))), [activeExperiments]);
   const maximumTime = useMemo(() => {
     const longest = Math.max(...visibleExperiments.map((item) => item.total), 300);
     return Math.ceil(longest / 300) * 300;
@@ -320,6 +368,35 @@ export default function ComparisonWorkbench() {
     event.target.value = '';
   }
 
+  function saveExperiment(next: RealExperiment) {
+    const normalized = normalizeExperiment(next);
+    setExperiments((current) => current.map((item) => item.id === normalized.id ? normalized : item));
+    setOverrides((current) => ({ ...current, [normalized.id]: normalized }));
+    setEditing(null);
+    setSelected(null);
+    setImportNote(`已保存 ${normalized.model} · ${normalized.shortName}`);
+  }
+
+  function saveNote(experiment: RealExperiment) {
+    saveExperiment({ ...experiment, note: noteDraft.trim() });
+    setNoteEditingId(null);
+    setPickerOpen(true);
+  }
+
+  function removeSelectedExperiments() {
+    if (!removeSelection.length) return;
+    setRemovedIds((current) => Array.from(new Set([...current, ...removeSelection])));
+    setVisibleIds((current) => current.filter((id) => !removeSelection.includes(id)));
+    setImportNote(`已从工作区移除 ${removeSelection.length} 个实验，可恢复`);
+    setRemoveSelection([]);
+    setManageMode(false);
+  }
+
+  function restoreRemoved() {
+    setRemovedIds([]);
+    setImportNote('已恢复全部实验');
+  }
+
   return (
     <main className="compare-app" style={{ '--run-column': `${labelWidth}px` } as CSSProperties}>
       <header className="compare-header">
@@ -331,25 +408,45 @@ export default function ComparisonWorkbench() {
         <div className="mode-title"><strong>实验时间轴</strong>{importNote && <span className="import-note">{importNote}</span>}</div>
         <div className="toolbar-actions">
           <input ref={fileInput} className="file-input" type="file" accept=".log,.txt,text/plain" multiple onChange={importLogs} />
-          <button className="tool-button" onClick={() => fileInput.current?.click()}><FileUp size={14} />导入 LOG</button>
           <div className="picker-wrap">
             <button className="tool-button" aria-expanded={pickerOpen} onClick={() => setPickerOpen((open) => !open)}>
-              <SlidersHorizontal size={14} />实验 {visibleExperiments.length}/{experiments.length}<ChevronDown size={13} />
+              <SlidersHorizontal size={14} />实验 {visibleExperiments.length}/{activeExperiments.length}<ChevronDown size={13} />
             </button>
             {pickerOpen && (
               <div className="experiment-picker">
-                <div className="picker-head"><strong>选择对比实验</strong><button onClick={() => setPickerOpen(false)} aria-label="关闭"><X size={13} /></button></div>
+                <div className="picker-head"><div><strong>实验工作区</strong><small>选择、筛选与人工修订</small></div><button onClick={() => setPickerOpen(false)} aria-label="关闭"><X size={13} /></button></div>
+                <div className="picker-tools">
+                  <button onClick={() => fileInput.current?.click()}><FileUp size={13} />导入 LOG</button>
+                  <button className={manageMode ? 'is-active' : ''} onClick={() => { setManageMode((value) => !value); setRemoveSelection([]); }}><Trash2 size={12} />移除</button>
+                  {removedIds.length > 0 && <button onClick={restoreRemoved}><RotateCcw size={12} />恢复 {removedIds.length}</button>}
+                </div>
+                <label className="picker-search"><Search size={13} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索模型、实验或备注" /></label>
+                <div className="picker-filters">
+                  <select value={modelFilter} onChange={(event) => setModelFilter(event.target.value)} aria-label="筛选模型"><option value="all">全部模型</option>{models.map((model) => <option value={model} key={model}>{model}</option>)}</select>
+                  <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as 'all' | RunStatus)} aria-label="筛选状态"><option value="all">全部状态</option><option value="complete">已完成</option><option value="partial">未完成</option><option value="evidence-gap">证据残缺</option></select>
+                </div>
                 <div className="picker-list">
-                  {experiments.map((experiment) => {
+                  {filteredExperiments.map((experiment) => {
                     const checked = visibleIds.includes(experiment.id);
+                    const removing = removeSelection.includes(experiment.id);
                     return (
-                      <button className={checked ? 'picker-item checked' : 'picker-item'} key={experiment.id} onClick={() => toggleExperiment(experiment.id)}>
-                        <span className="check-box">{checked && <Check size={11} />}</span><span><strong>{experiment.model}</strong><small>{experiment.shortName}</small></span>
-                      </button>
+                      <div className={`picker-item${checked ? ' checked' : ''}${removing ? ' removing' : ''}`} key={experiment.id}>
+                        <button className="visibility-toggle" onClick={() => toggleExperiment(experiment.id)} aria-label={checked ? '隐藏实验' : '显示实验'}><span className="check-box">{checked && <Check size={11} />}</span></button>
+                        <button className="picker-meta" onClick={() => toggleExperiment(experiment.id)}><strong>{experiment.model}</strong><small>{experiment.shortName}</small>{experiment.note && <em>{experiment.note}</em>}</button>
+                        {!manageMode && <button className={baselines[experiment.model] === experiment.id ? 'picker-icon is-active' : 'picker-icon'} onClick={() => setBaselines((current) => ({ ...current, [experiment.model]: experiment.id }))} title="设为该模型对比基线"><Bookmark size={12} /></button>}
+                        {!manageMode && <button className="picker-icon" onClick={() => { setNoteEditingId(experiment.id); setNoteDraft(experiment.note ?? ''); }} title="编辑备注"><StickyNote size={12} /></button>}
+                        {manageMode && <button className="remove-check" onClick={() => setRemoveSelection((current) => current.includes(experiment.id) ? current.filter((id) => id !== experiment.id) : [...current, experiment.id])}>{removing ? <Check size={12} /> : <Trash2 size={11} />}</button>}
+                        {noteEditingId === experiment.id && <div className="note-editor"><input autoFocus value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="备注会显示在左侧标签列" onKeyDown={(event) => { if (event.key === 'Enter') saveNote(experiment); if (event.key === 'Escape') setNoteEditingId(null); }} /><button onClick={() => saveNote(experiment)}>保存</button></div>}
+                      </div>
                     );
                   })}
+                  {!filteredExperiments.length && <div className="picker-empty">没有符合条件的实验</div>}
                 </div>
-                <div className="picker-foot"><button onClick={() => setVisibleIds(experiments.map((item) => item.id))}>全选</button><span>双击实验设为基线</span></div>
+                <div className="picker-foot">
+                  {manageMode
+                    ? <><span>选择要从本机工作区移除的实验</span><button className="danger-action" disabled={!removeSelection.length} onClick={removeSelectedExperiments}>移除 {removeSelection.length || ''}</button></>
+                    : <><button onClick={() => setVisibleIds(activeExperiments.map((item) => item.id))}>全选</button><span>基线按模型独立设置</span></>}
+                </div>
               </div>
             )}
           </div>
@@ -366,8 +463,8 @@ export default function ComparisonWorkbench() {
         <div className="experiment-list">
           {visibleExperiments.map((experiment) => {
             const width = (experiment.total / maximumTime) * 100;
-            const referenceExperiment = experiments.find((item) => item.id === baselines[experiment.model])
-              ?? experiments.find((item) => item.model === experiment.model && item.status === 'complete');
+            const referenceExperiment = activeExperiments.find((item) => item.id === baselines[experiment.model])
+              ?? activeExperiments.find((item) => item.model === experiment.model && item.status === 'complete');
             const delta = experiment.status === 'complete' && referenceExperiment?.status === 'complete'
               ? ((experiment.total - referenceExperiment.total) / referenceExperiment.total) * 100
               : undefined;
@@ -379,11 +476,11 @@ export default function ComparisonWorkbench() {
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}`}
                 key={experiment.id}
-                onDoubleClick={() => experiment.status === 'complete' && setBaselines((current) => ({ ...current, [experiment.model]: experiment.id }))}
-                title={`${experiment.name} · ${experiment.config}${experiment.status === 'complete' ? ' · 双击设为该模型基线' : ''}`}
+                onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest('button')) setEditing(experiment); }}
+                title={`${experiment.name} · ${experiment.config} · 双击编辑人工标注`}
               >
                 <div className="experiment-name">
-                  <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small></div>
+                  <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>{experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}</div>
                   {isBaseline && <span className="base-dot" title="当前模型基线" />}
                 </div>
 
@@ -395,7 +492,7 @@ export default function ComparisonWorkbench() {
                     onPointerMove={moveJelly}
                     onPointerLeave={resetJelly}
                   >
-                    <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-specular" />
+                    <span className="jelly-color" /><span className="jelly-depth" /><span className="jelly-caustic" /><span className="jelly-specular" />
                     <RelationLayer
                       experiment={experiment}
                       selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
@@ -439,9 +536,11 @@ export default function ComparisonWorkbench() {
         </aside>
       )}
 
+      {editing && <ExperimentEditor experiment={editing} onCancel={() => setEditing(null)} onSave={saveExperiment} />}
+
       <footer className="compare-footer">
-        <span>数据快照 <code>/models/wangakang/KeyanHu-workspace</code></span>
-        <span>2026-08-25 10:33 · {logCount} logs · {experiments.length} runs</span>
+        <span>数据快照 <code>KeyanHu-workspace</code><button className="reading-help" aria-label="查看时间图阅读说明"><CircleHelp size={12} /><span><b>读图说明</b>横轴为实验内相对时间；色带颜色与时间位置一致；实线表示已确认关系，虚线表示回推关系，灰点表示尚无关系；开口或斑点尾端表示未完成或证据缺口；双击实验可编辑人工标注。</span></button></span>
+        <span>2026-08-25 10:33 · {logCount} logs · {activeExperiments.length} runs</span>
       </footer>
     </main>
   );
