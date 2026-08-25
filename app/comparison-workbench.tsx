@@ -118,10 +118,71 @@ function resetJelly(event: ReactPointerEvent<HTMLDivElement>) {
   event.currentTarget.style.setProperty('--my', '8%');
 }
 
-function nodeLaneY(node: TimeNode) {
-  if (node.lane === 0) return 14;
-  if (node.lane === 1) return 36;
-  return 25;
+const MAIN_LANE_Y = 25;
+
+function branchOrder(node: TimeNode) {
+  const semantic = node.label.match(/(?:DP|节点)\s*[·:_-]?\s*(\d+)/i);
+  if (semantic) return Number(semantic[1]);
+  return node.lane ?? Number.MAX_SAFE_INTEGER;
+}
+
+function branchLanePositions(count: number) {
+  if (count <= 1) return [MAIN_LANE_Y];
+  const top = count > 3 ? 9 : 14;
+  const bottom = count > 3 ? 41 : 36;
+  return Array.from({ length: count }, (_, index) => top + ((bottom - top) * index) / (count - 1));
+}
+
+function createLaneLayout(experiment: RealExperiment) {
+  const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
+  const incoming = new Map<string, TimeLink[]>();
+  const outgoing = new Map<string, TimeLink[]>();
+  experiment.links.forEach((link) => {
+    incoming.set(link.to, [...(incoming.get(link.to) ?? []), link]);
+    outgoing.set(link.from, [...(outgoing.get(link.from) ?? []), link]);
+  });
+
+  const layout = new Map(experiment.nodes.map((node) => [node.id, MAIN_LANE_Y]));
+  experiment.nodes
+    .slice()
+    .sort((left, right) => left.time - right.time || left.id.localeCompare(right.id))
+    .forEach((source) => {
+      const branches = (outgoing.get(source.id) ?? [])
+        .filter((link) => link.kind === 'branch')
+        .sort((left, right) => {
+          const leftNode = nodes.get(left.to);
+          const rightNode = nodes.get(right.to);
+          if (!leftNode || !rightNode) return left.to.localeCompare(right.to);
+          return branchOrder(leftNode) - branchOrder(rightNode) || leftNode.id.localeCompare(rightNode.id);
+        });
+      if (branches.length < 2) return;
+
+      const positions = branchLanePositions(branches.length);
+      branches.forEach((branch, index) => {
+        let cursor = branch.to;
+        const visited = new Set<string>();
+        while (!visited.has(cursor) && nodes.has(cursor)) {
+          visited.add(cursor);
+          layout.set(cursor, positions[index]);
+          const nextLinks = (outgoing.get(cursor) ?? []).filter((link) => link.kind === 'sequence');
+          if (nextLinks.length !== 1) break;
+          const next = nextLinks[0].to;
+          if ((incoming.get(next) ?? []).length !== 1) break;
+          cursor = next;
+        }
+      });
+    });
+
+  experiment.nodes.forEach((node) => {
+    if ((incoming.get(node.id) ?? []).length > 1) layout.set(node.id, MAIN_LANE_Y);
+  });
+  return layout;
+}
+
+function laneClass(y: number) {
+  if (y < MAIN_LANE_Y - 1) return 'lane-upper';
+  if (y > MAIN_LANE_Y + 1) return 'lane-lower';
+  return 'lane-main';
 }
 
 function nodeStageKey(node: TimeNode) {
@@ -234,14 +295,14 @@ function createTimeLens(experiment: RealExperiment, linkId: string | undefined, 
   };
 }
 
-function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, positionAt: (time: number) => number) {
+function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, laneY: Map<string, number>, positionAt: (time: number) => number) {
   const source = nodes.get(link.from);
   const target = nodes.get(link.to);
   if (!source || !target) return '';
   const x1 = positionAt(source.time);
   const x2 = positionAt(target.time);
-  const y1 = nodeLaneY(source);
-  const y2 = nodeLaneY(target);
+  const y1 = laneY.get(source.id) ?? MAIN_LANE_Y;
+  const y2 = laneY.get(target.id) ?? MAIN_LANE_Y;
   if (y1 === y2) return `M ${x1} ${y1} L ${x2} ${y2}`;
   const bend = Math.max(0.8, Math.min(3.2, (x2 - x1) * 0.28));
   if (link.kind === 'branch') return `M ${x1} ${y1} L ${x1 + bend} ${y1} C ${x1 + bend * 1.35} ${y1} ${x2 - bend * 0.7} ${y2} ${x2} ${y2}`;
@@ -255,6 +316,7 @@ function RelationLayer({
   focusedLinkId,
   showDurations,
   positionAt,
+  laneY,
   pinnedLinkId,
   expandedLinkId,
   onLinkHover,
@@ -267,6 +329,7 @@ function RelationLayer({
   focusedLinkId?: string;
   showDurations: boolean;
   positionAt: (time: number) => number;
+  laneY: Map<string, number>;
   pinnedLinkId?: string;
   expandedLinkId?: string;
   onLinkHover: (target?: RelationTarget) => void;
@@ -282,7 +345,7 @@ function RelationLayer({
           const stageKey = linkStageKey(link, nodes);
           const active = interactive && (focusedStageKey ? focusedStageKey === stageKey : focusedLinkId ? focusedLinkId === link.id : selectedNodeId === link.from || selectedNodeId === link.to);
           const dimmed = interactive && Boolean(focusedStageKey || focusedLinkId || selectedNodeId) && !active;
-          const path = relationPath(link, nodes, positionAt);
+          const path = relationPath(link, nodes, laneY, positionAt);
           const source = nodes.get(link.from)?.label ?? link.from;
           const target = nodes.get(link.to)?.label ?? link.to;
           const relationTarget = { experimentId: experiment.id, linkId: link.id, stageKey };
@@ -329,7 +392,7 @@ function RelationLayer({
         const target = nodes.get(link.to);
         if (!source || !target) return null;
         const midpoint = positionAt((source.time + target.time) / 2);
-        const lane = (nodeLaneY(source) + nodeLaneY(target)) / 2;
+        const lane = ((laneY.get(source.id) ?? MAIN_LANE_Y) + (laneY.get(target.id) ?? MAIN_LANE_Y)) / 2;
         const elapsed = Math.max(0, target.time - source.time);
         return (
           <span className="relation-duration" key={`${link.id}-duration`} style={{ left: `${midpoint}%`, top: `${lane}px` }} title={`${source.label} → ${target.label}：${formatSeconds(elapsed)}`}>
@@ -344,6 +407,7 @@ function RelationLayer({
 function NodeMarker({
   node,
   position,
+  y,
   selected,
   stagePeer,
   relationState,
@@ -351,17 +415,17 @@ function NodeMarker({
 }: {
   node: TimeNode;
   position: number;
+  y: number;
   selected: boolean;
   stagePeer: boolean;
   relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
   onSelect: (node: TimeNode, anchor: Selection['anchor']) => void;
 }) {
-  const laneClass = node.lane === undefined ? 'lane-main' : `lane-${node.lane}`;
   const edgeClass = position <= 1 ? 'edge-start' : position >= 88 ? 'edge-end' : '';
   return (
     <button
-      className={`embedded-node node-${node.kind} ${laneClass} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}`}
-      style={{ left: `${position}%`, '--node-y': `${nodeLaneY(node)}px` } as CSSProperties}
+      className={`embedded-node node-${node.kind} ${laneClass(y)} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}`}
+      style={{ left: `${position}%`, '--node-y': `${y}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
         const rect = event.currentTarget.getBoundingClientRect();
@@ -661,7 +725,7 @@ export default function ComparisonWorkbench() {
                 <section className="guide-actions">
                   <span><b>悬停连线</b> 临时突出该阶段</span>
                   <span><b>单击连线</b> 锁定或取消突出</span>
-                  <span><b>双击连线</b> 拉伸或恢复该时间段</span>
+                  <span><b>双击连线</b> 展开或恢复细分时间线</span>
                   <span><b>点击节点</b> 查看时间与说明</span>
                   <span><b>右键实验</b> 编辑时间关系</span>
                 </section>
@@ -739,6 +803,7 @@ export default function ComparisonWorkbench() {
             const lens = createTimeLens(experiment, expandedLinkId, width, maximumTime);
             const positionAt = lens?.positionAt ?? ((time: number) => Math.max(0, Math.min(100, (time / experiment.total) * 100)));
             const displayWidth = lens?.displayWidth ?? width;
+            const laneY = createLaneLayout(experiment);
             return (
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}${lens ? ' has-time-lens' : ''}`}
@@ -802,6 +867,7 @@ export default function ComparisonWorkbench() {
                         focusedLinkId={focusApplies && !preferences.syncStages ? relationFocus?.linkId : undefined}
                         showDurations={preferences.showDurations}
                         positionAt={positionAt}
+                        laneY={laneY}
                         pinnedLinkId={pinnedRelation?.experimentId === experiment.id ? pinnedRelation.linkId : undefined}
                         expandedLinkId={expandedLinkId}
                         onLinkHover={(target) => setHoveredRelation(target ?? null)}
@@ -815,7 +881,7 @@ export default function ComparisonWorkbench() {
                           : focusedLinks.length
                             ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
                             : 'idle';
-                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
+                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
                       })}
                     </div>
                   </div>
