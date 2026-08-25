@@ -479,9 +479,22 @@ export default function ComparisonWorkbench() {
                 onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest('button')) setEditing(experiment); }}
                 title={`${experiment.name} · ${experiment.config} · 双击编辑人工标注`}
               >
-                <div className="experiment-name">
+                <div
+                  className="experiment-name"
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`编辑 ${experiment.model} ${experiment.shortName}`}
+                  title="单击编辑实验标签、备注与时间节点"
+                  onClick={(event) => { event.stopPropagation(); setEditing(experiment); }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setEditing(experiment);
+                    }
+                  }}
+                >
                   <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>{experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}</div>
-                  {isBaseline && <span className="base-dot" title="当前模型基线" />}
+                  <span className="label-actions"><Pencil className="row-edit-indicator" size={10} />{isBaseline && <i className="base-dot" title="当前模型基线" />}</span>
                 </div>
 
                 <div className="band-track">
