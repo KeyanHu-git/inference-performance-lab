@@ -122,9 +122,9 @@ export function ExperimentEditor({ experiment, onCancel, onSave }: {
         <div className="graph-canvas" onPointerDown={(event) => { if (event.target === event.currentTarget) { setSelectedId(''); setLinkingFrom(null); } }}>
           <div className="graph-stage" ref={stage}>
             <div className="graph-time-axis"><span>0s</span><span>{formatSeconds(draft.total / 2)}</span><span>{formatSeconds(draft.total)}</span></div>
-            <div className="graph-lane lane-a"><span>侧轴 A</span></div>
-            <div className="graph-lane lane-main"><span>主轴</span></div>
-            <div className="graph-lane lane-b"><span>侧轴 B</span></div>
+            <div className="graph-lane graph-lane-a"><span>侧轴 A</span></div>
+            <div className="graph-lane graph-lane-main"><span>主轴</span></div>
+            <div className="graph-lane graph-lane-b"><span>侧轴 B</span></div>
             <svg className="graph-links" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
               {draft.links.map((link) => {
                 const from = nodeMap.get(link.from);
