@@ -106,15 +106,11 @@ function moveJelly(event: ReactPointerEvent<HTMLDivElement>) {
   const y = (event.clientY - box.top) / box.height;
   event.currentTarget.style.setProperty('--mx', `${x * 100}%`);
   event.currentTarget.style.setProperty('--my', `${y * 100}%`);
-  event.currentTarget.style.setProperty('--ry', `${(x - 0.5) * 1.4}deg`);
-  event.currentTarget.style.setProperty('--rx', `${(0.5 - y) * 1.8}deg`);
 }
 
 function resetJelly(event: ReactPointerEvent<HTMLDivElement>) {
   event.currentTarget.style.setProperty('--mx', '42%');
   event.currentTarget.style.setProperty('--my', '8%');
-  event.currentTarget.style.setProperty('--ry', '0deg');
-  event.currentTarget.style.setProperty('--rx', '0deg');
 }
 
 function nodeLaneY(node: TimeNode) {
@@ -395,7 +391,7 @@ export default function ComparisonWorkbench() {
                   {ticks.map((tick) => <span className="track-grid" key={tick} style={{ left: `${(tick / maximumTime) * 100}%` }} />)}
                   <div
                     className={`jelly-shell status-${experiment.status}`}
-                    style={{ width: `${width}%`, '--band-scale': `${10000 / width}%`, '--mx': '42%', '--my': '8%', '--rx': '0deg', '--ry': '0deg' } as CSSProperties}
+                    style={{ width: `${width}%`, '--band-scale': `${10000 / width}%`, '--mx': '42%', '--my': '8%' } as CSSProperties}
                     onPointerMove={moveJelly}
                     onPointerLeave={resetJelly}
                   >
