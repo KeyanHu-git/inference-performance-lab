@@ -1,6 +1,6 @@
 'use client';
 
-import { Bookmark, Check, ChevronDown, FileUp, Pencil, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, CircleHelp, FileUp, Pencil, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
@@ -327,6 +327,7 @@ export default function ComparisonWorkbench() {
   const [labelWidth, setLabelWidth] = useState(162);
   const [relationFocus, setRelationFocus] = useState<RelationFocus>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [preferences, setPreferences] = useState<ViewPreferences>(DEFAULT_PREFERENCES);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -472,13 +473,13 @@ export default function ComparisonWorkbench() {
         <div className="toolbar-actions">
           <input ref={fileInput} className="file-input" type="file" accept=".log,.txt,text/plain" multiple onChange={importLogs} />
           <div className="settings-wrap">
-            <button className={`tool-button${settingsOpen ? ' is-active' : ''}`} aria-expanded={settingsOpen} onClick={() => { setSettingsOpen((open) => !open); setPickerOpen(false); }}>
+            <button className={`tool-button${settingsOpen ? ' is-active' : ''}`} aria-expanded={settingsOpen} onClick={() => { setSettingsOpen((open) => !open); setHelpOpen(false); setPickerOpen(false); }}>
               <Settings2 size={14} />设置
             </button>
             {settingsOpen && (
               <aside className="view-settings" aria-label="时间图显示设置">
                 <header>
-                  <div><strong>显示设置</strong><small>只改变读图方式，不修改实验数据</small></div>
+                  <div><strong>显示设置</strong><small>时间轴显示选项</small></div>
                   <button onClick={() => setSettingsOpen(false)} aria-label="关闭设置"><X size={13} /></button>
                 </header>
                 <section className="settings-controls">
@@ -488,7 +489,7 @@ export default function ComparisonWorkbench() {
                     aria-checked={preferences.syncStages}
                     onClick={() => setPreferences((current) => ({ ...current, syncStages: !current.syncStages }))}
                   >
-                    <span><strong>跨实验同阶段联动</strong><small>指向节点或连线时，同步强调其他实验的对应阶段。</small></span>
+                    <span><strong>跨实验联动</strong><small>选中阶段后，突出显示其他实验的对应阶段。</small></span>
                     <i className={preferences.syncStages ? 'switch is-on' : 'switch'}><b /></i>
                   </button>
                   <button
@@ -497,22 +498,39 @@ export default function ComparisonWorkbench() {
                     aria-checked={preferences.showDurations}
                     onClick={() => setPreferences((current) => ({ ...current, showDurations: !current.showDurations }))}
                   >
-                    <span><strong>显示阶段耗时</strong><small>强调连线时，在每个实验内标出该段时间。</small></span>
+                    <span><strong>阶段耗时</strong><small>在线段上显示起点至终点的用时。</small></span>
                     <i className={preferences.showDurations ? 'switch is-on' : 'switch'}><b /></i>
                   </button>
                 </section>
+              </aside>
+            )}
+          </div>
+          <div className="guide-wrap">
+            <button className={`icon-tool-button${helpOpen ? ' is-active' : ''}`} aria-label="打开读图说明" title="读图说明" aria-expanded={helpOpen} onClick={() => { setHelpOpen((open) => !open); setSettingsOpen(false); setPickerOpen(false); }}>
+              <CircleHelp size={15} />
+            </button>
+            {helpOpen && (
+              <aside className="timeline-guide" aria-label="时间轴读图说明">
+                <header>
+                  <div><strong>读图说明</strong><small>时间点与流程关系</small></div>
+                  <button onClick={() => setHelpOpen(false)} aria-label="关闭说明"><X size={13} /></button>
+                </header>
                 <section className="relation-guide">
-                  <h2>关系怎么读</h2>
-                  <div><i className="guide-line confirmed" /><span><strong>实线</strong><small>日志或配置明确证明前后关系</small></span></div>
-                  <div><i className="guide-line inferred" /><span><strong>虚线</strong><small>依据耗时或日志顺序回推，仍需核验</small></span></div>
-                  <div><i className="guide-node" /><span><strong>灰点</strong><small>时间点存在，但尚未接入关系链</small></span></div>
-                  <p><b>没有连线，不代表时间点不存在。</b>它表示目前只能确认两个时间点，不能确认它们存在直接依赖。时间先后不等于流程关系，因此系统不会擅自补线；需要修正时，右键该实验进入时间关系编辑器。</p>
+                  <div><i className="guide-line confirmed" /><span><strong>实线</strong><small>已确认的流程关系</small></span></div>
+                  <div><i className="guide-line inferred" /><span><strong>虚线</strong><small>根据日志时间回推的关系</small></span></div>
+                  <div><i className="guide-node" /><span><strong>灰点</strong><small>尚未连接到流程的时间点</small></span></div>
+                  <div><i className="guide-gap"><b /><b /></i><span><strong>无连线</strong><small>仅表示时间先后，未定义直接流程关系</small></span></div>
+                </section>
+                <section className="guide-actions">
+                  <span><b>悬停连线</b> 查看并对比阶段</span>
+                  <span><b>点击节点</b> 查看时间与说明</span>
+                  <span><b>右键实验</b> 编辑时间关系</span>
                 </section>
               </aside>
             )}
           </div>
           <div className="picker-wrap">
-            <button className="tool-button" aria-expanded={pickerOpen} onClick={() => { setPickerOpen((open) => !open); setSettingsOpen(false); }}>
+            <button className="tool-button" aria-expanded={pickerOpen} onClick={() => { setPickerOpen((open) => !open); setSettingsOpen(false); setHelpOpen(false); }}>
               <SlidersHorizontal size={14} />实验 {visibleExperiments.length}/{activeExperiments.length}<ChevronDown size={13} />
             </button>
             {pickerOpen && (
