@@ -275,6 +275,7 @@ export default function ComparisonWorkbench() {
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [editing, setEditing] = useState<RealExperiment | null>(null);
+  const [currentExperimentId, setCurrentExperimentId] = useState(realExperiments[0]?.id ?? '');
   const [labelWidth, setLabelWidth] = useState(162);
   const [relationFocus, setRelationFocus] = useState<RelationFocus>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -475,20 +476,26 @@ export default function ComparisonWorkbench() {
               : undefined;
             return (
               <article
-                className={`experiment-row${isBaseline ? ' is-baseline' : ''}`}
+                className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}`}
                 key={experiment.id}
-                onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest('button')) setEditing(experiment); }}
-                title={`${experiment.name} · ${experiment.config} · 双击编辑人工标注`}
+                onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest('button')) { setCurrentExperimentId(experiment.id); setEditing(experiment); } }}
+                title={`${experiment.name} · ${experiment.config} · 单击选择，双击编辑`}
               >
                 <div
                   className="experiment-name"
                   role="button"
                   tabIndex={0}
-                  aria-label={`编辑 ${experiment.model} ${experiment.shortName}`}
-                  title="单击编辑实验标签、备注与时间节点"
-                  onClick={(event) => { event.stopPropagation(); setEditing(experiment); }}
+                  aria-pressed={currentExperimentId === experiment.id}
+                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；双击编辑`}
+                  title="单击选择当前实验，双击编辑时间关系"
+                  onClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); }}
+                  onDoubleClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); setEditing(experiment); }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setCurrentExperimentId(experiment.id);
+                    }
+                    if (event.key === 'F2') {
                       event.preventDefault();
                       setEditing(experiment);
                     }
