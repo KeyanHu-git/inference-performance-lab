@@ -124,8 +124,8 @@ function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, duration: nu
   const source = nodes.get(link.from);
   const target = nodes.get(link.to);
   if (!source || !target) return '';
-  const x1 = Math.min(99.4, (source.time / duration) * 100);
-  const x2 = Math.min(99.4, (target.time / duration) * 100);
+  const x1 = Math.max(0, Math.min(100, (source.time / duration) * 100));
+  const x2 = Math.max(0, Math.min(100, (target.time / duration) * 100));
   const y1 = nodeLaneY(source);
   const y2 = nodeLaneY(target);
   if (y1 === y2) return `M ${x1} ${y1} L ${x2} ${y2}`;
@@ -204,11 +204,12 @@ function NodeMarker({
   relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
   onSelect: (node: TimeNode, anchor: Selection['anchor']) => void;
 }) {
-  const position = Math.min(99.4, (node.time / duration) * 100);
+  const position = Math.max(0, Math.min(100, (node.time / duration) * 100));
   const laneClass = node.lane === undefined ? 'lane-main' : `lane-${node.lane}`;
+  const edgeClass = position <= 1 ? 'edge-start' : position >= 88 ? 'edge-end' : '';
   return (
     <button
-      className={`embedded-node node-${node.kind} ${laneClass} relation-${relationState}${selected ? ' is-selected' : ''}`}
+      className={`embedded-node node-${node.kind} ${laneClass} ${edgeClass} relation-${relationState}${selected ? ' is-selected' : ''}`}
       style={{ left: `${position}%`, '--node-y': `${nodeLaneY(node)}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
