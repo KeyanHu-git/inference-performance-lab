@@ -478,18 +478,21 @@ export default function ComparisonWorkbench() {
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}`}
                 key={experiment.id}
-                onDoubleClick={(event) => { if (!(event.target as HTMLElement).closest('button')) { setCurrentExperimentId(experiment.id); setEditing(experiment); } }}
-                title={`${experiment.name} · ${experiment.config} · 单击选择，双击编辑`}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  setCurrentExperimentId(experiment.id);
+                  setEditing(experiment);
+                }}
+                title={`${experiment.name} · ${experiment.config} · 左键选择，右键编辑`}
               >
                 <div
                   className="experiment-name"
                   role="button"
                   tabIndex={0}
                   aria-pressed={currentExperimentId === experiment.id}
-                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；双击编辑`}
-                  title="单击选择当前实验，双击编辑时间关系"
+                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；右键编辑`}
+                  title="左键选择当前实验，右键编辑时间关系"
                   onClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); }}
-                  onDoubleClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); setEditing(experiment); }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
