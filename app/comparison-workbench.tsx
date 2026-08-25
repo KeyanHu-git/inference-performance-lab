@@ -1,12 +1,13 @@
 'use client';
 
-import { Bookmark, Check, ChevronDown, CircleHelp, FileUp, Pencil, RotateCcw, Search, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, FileUp, Pencil, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
-type RelationFocus = { stageKey: string } | null;
+type RelationFocus = { experimentId: string; linkId: string; stageKey: string } | null;
+type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
 type WorkspaceState = {
   imported: RealExperiment[];
@@ -15,6 +16,8 @@ type WorkspaceState = {
 };
 
 const WORKSPACE_KEY = 'chronoscope.workspace.v1';
+const PREFERENCES_KEY = 'chronoscope.preferences.v1';
+const DEFAULT_PREFERENCES: ViewPreferences = { syncStages: true, showDurations: true };
 
 function lineTime(line: string) {
   const match = line.match(/(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})/);
@@ -159,12 +162,16 @@ function RelationLayer({
   experiment,
   selectedNodeId,
   focusedStageKey,
+  focusedLinkId,
+  showDurations,
   onLinkFocus,
 }: {
   experiment: RealExperiment;
   selectedNodeId?: string;
   focusedStageKey?: string;
-  onLinkFocus: (stageKey?: string) => void;
+  focusedLinkId?: string;
+  showDurations: boolean;
+  onLinkFocus: (stageKey?: string, linkId?: string) => void;
 }) {
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   return (
@@ -173,8 +180,8 @@ function RelationLayer({
         {experiment.links.map((link) => {
           const interactive = link.interactive !== false;
           const stageKey = linkStageKey(link, nodes);
-          const active = interactive && (focusedStageKey ? focusedStageKey === stageKey : selectedNodeId === link.from || selectedNodeId === link.to);
-          const dimmed = interactive && Boolean(focusedStageKey || selectedNodeId) && !active;
+          const active = interactive && (focusedStageKey ? focusedStageKey === stageKey : focusedLinkId ? focusedLinkId === link.id : selectedNodeId === link.from || selectedNodeId === link.to);
+          const dimmed = interactive && Boolean(focusedStageKey || focusedLinkId || selectedNodeId) && !active;
           const path = relationPath(link, nodes, experiment.total);
           const source = nodes.get(link.from)?.label ?? link.from;
           const target = nodes.get(link.to)?.label ?? link.to;
@@ -194,16 +201,16 @@ function RelationLayer({
                   tabIndex={0}
                   role="button"
                   aria-label={`${source} 至 ${target} 的时间关系`}
-                  onPointerEnter={() => onLinkFocus(stageKey)}
+                  onPointerEnter={() => onLinkFocus(stageKey, link.id)}
                   onPointerLeave={(event) => {
                     if (document.activeElement !== event.currentTarget) onLinkFocus();
                   }}
-                  onFocus={() => onLinkFocus(stageKey)}
+                  onFocus={() => onLinkFocus(stageKey, link.id)}
                   onBlur={() => onLinkFocus()}
                   onClick={(event) => {
                     event.stopPropagation();
                     event.currentTarget.focus();
-                    onLinkFocus(stageKey);
+                    onLinkFocus(stageKey, link.id);
                   }}
                 />
               )}
@@ -211,8 +218,9 @@ function RelationLayer({
           );
         })}
       </svg>
-      {focusedStageKey && experiment.links.map((link) => {
-        if (link.interactive === false || linkStageKey(link, nodes) !== focusedStageKey) return null;
+      {showDurations && (focusedStageKey || focusedLinkId) && experiment.links.map((link) => {
+        const matchesFocus = focusedStageKey ? linkStageKey(link, nodes) === focusedStageKey : link.id === focusedLinkId;
+        if (link.interactive === false || !matchesFocus) return null;
         const source = nodes.get(link.from);
         const target = nodes.get(link.to);
         if (!source || !target) return null;
@@ -318,6 +326,8 @@ export default function ComparisonWorkbench() {
   const [currentExperimentId, setCurrentExperimentId] = useState(realExperiments[0]?.id ?? '');
   const [labelWidth, setLabelWidth] = useState(162);
   const [relationFocus, setRelationFocus] = useState<RelationFocus>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [preferences, setPreferences] = useState<ViewPreferences>(DEFAULT_PREFERENCES);
   const fileInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -337,6 +347,12 @@ export default function ComparisonWorkbench() {
       } catch {
         setImportNote('本机修订记录无法读取，已使用原始解析结果');
       }
+      try {
+        const storedPreferences = JSON.parse(localStorage.getItem(PREFERENCES_KEY) ?? 'null') as Partial<ViewPreferences> | null;
+        if (storedPreferences) setPreferences({ ...DEFAULT_PREFERENCES, ...storedPreferences });
+      } catch {
+        setPreferences(DEFAULT_PREFERENCES);
+      }
       setWorkspaceReady(true);
     }, 0);
     return () => window.clearTimeout(hydrate);
@@ -347,6 +363,11 @@ export default function ComparisonWorkbench() {
     const imported = experiments.filter((item) => !realExperiments.some((base) => base.id === item.id));
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds } satisfies WorkspaceState));
   }, [experiments, overrides, removedIds, workspaceReady]);
+
+  useEffect(() => {
+    if (!workspaceReady) return;
+    localStorage.setItem(PREFERENCES_KEY, JSON.stringify(preferences));
+  }, [preferences, workspaceReady]);
 
   const activeExperiments = useMemo(() => experiments.filter((item) => !removedIds.includes(item.id)), [experiments, removedIds]);
   const visibleExperiments = useMemo(() => activeExperiments.filter((item) => visibleIds.includes(item.id)), [activeExperiments, visibleIds]);
@@ -450,8 +471,48 @@ export default function ComparisonWorkbench() {
         <div className="mode-title"><strong>实验时间轴</strong>{importNote && <span className="import-note">{importNote}</span>}</div>
         <div className="toolbar-actions">
           <input ref={fileInput} className="file-input" type="file" accept=".log,.txt,text/plain" multiple onChange={importLogs} />
+          <div className="settings-wrap">
+            <button className={`tool-button${settingsOpen ? ' is-active' : ''}`} aria-expanded={settingsOpen} onClick={() => { setSettingsOpen((open) => !open); setPickerOpen(false); }}>
+              <Settings2 size={14} />设置
+            </button>
+            {settingsOpen && (
+              <aside className="view-settings" aria-label="时间图显示设置">
+                <header>
+                  <div><strong>显示设置</strong><small>只改变读图方式，不修改实验数据</small></div>
+                  <button onClick={() => setSettingsOpen(false)} aria-label="关闭设置"><X size={13} /></button>
+                </header>
+                <section className="settings-controls">
+                  <button
+                    className="setting-row"
+                    role="switch"
+                    aria-checked={preferences.syncStages}
+                    onClick={() => setPreferences((current) => ({ ...current, syncStages: !current.syncStages }))}
+                  >
+                    <span><strong>跨实验同阶段联动</strong><small>指向节点或连线时，同步强调其他实验的对应阶段。</small></span>
+                    <i className={preferences.syncStages ? 'switch is-on' : 'switch'}><b /></i>
+                  </button>
+                  <button
+                    className="setting-row"
+                    role="switch"
+                    aria-checked={preferences.showDurations}
+                    onClick={() => setPreferences((current) => ({ ...current, showDurations: !current.showDurations }))}
+                  >
+                    <span><strong>显示阶段耗时</strong><small>强调连线时，在每个实验内标出该段时间。</small></span>
+                    <i className={preferences.showDurations ? 'switch is-on' : 'switch'}><b /></i>
+                  </button>
+                </section>
+                <section className="relation-guide">
+                  <h2>关系怎么读</h2>
+                  <div><i className="guide-line confirmed" /><span><strong>实线</strong><small>日志或配置明确证明前后关系</small></span></div>
+                  <div><i className="guide-line inferred" /><span><strong>虚线</strong><small>依据耗时或日志顺序回推，仍需核验</small></span></div>
+                  <div><i className="guide-node" /><span><strong>灰点</strong><small>时间点存在，但尚未接入关系链</small></span></div>
+                  <p><b>没有连线，不代表时间点不存在。</b>它表示目前只能确认两个时间点，不能确认它们存在直接依赖。时间先后不等于流程关系，因此系统不会擅自补线；需要修正时，右键该实验进入时间关系编辑器。</p>
+                </section>
+              </aside>
+            )}
+          </div>
           <div className="picker-wrap">
-            <button className="tool-button" aria-expanded={pickerOpen} onClick={() => setPickerOpen((open) => !open)}>
+            <button className="tool-button" aria-expanded={pickerOpen} onClick={() => { setPickerOpen((open) => !open); setSettingsOpen(false); }}>
               <SlidersHorizontal size={14} />实验 {visibleExperiments.length}/{activeExperiments.length}<ChevronDown size={13} />
             </button>
             {pickerOpen && (
@@ -512,8 +573,9 @@ export default function ComparisonWorkbench() {
               : undefined;
             const isBaseline = baselines[experiment.model] === experiment.id;
             const experimentNodes = new Map(experiment.nodes.map((node) => [node.id, node]));
-            const focusedLinks = relationFocus
-              ? experiment.links.filter((link) => linkStageKey(link, experimentNodes) === relationFocus.stageKey)
+            const focusApplies = Boolean(relationFocus && (preferences.syncStages || relationFocus.experimentId === experiment.id));
+            const focusedLinks = focusApplies && relationFocus
+              ? experiment.links.filter((link) => preferences.syncStages ? linkStageKey(link, experimentNodes) === relationFocus.stageKey : link.id === relationFocus.linkId)
               : [];
             return (
               <article
@@ -561,8 +623,10 @@ export default function ComparisonWorkbench() {
                     <RelationLayer
                       experiment={experiment}
                       selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
-                      focusedStageKey={relationFocus?.stageKey}
-                      onLinkFocus={(stageKey) => setRelationFocus(stageKey ? { stageKey } : null)}
+                      focusedStageKey={focusApplies && preferences.syncStages ? relationFocus?.stageKey : undefined}
+                      focusedLinkId={focusApplies && !preferences.syncStages ? relationFocus?.linkId : undefined}
+                      showDurations={preferences.showDurations}
+                      onLinkFocus={(stageKey, linkId) => setRelationFocus(stageKey && linkId ? { experimentId: experiment.id, linkId, stageKey } : null)}
                     />
                     {experiment.nodes.map((node) => {
                       const hasInteractiveRelation = experiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
@@ -571,7 +635,7 @@ export default function ComparisonWorkbench() {
                         : focusedLinks.length
                           ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
                           : 'idle';
-                      return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
+                      return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
                     })}
                   </div>
                 </div>
@@ -604,7 +668,7 @@ export default function ComparisonWorkbench() {
       {editing && <ExperimentEditor experiment={editing} onCancel={() => setEditing(null)} onSave={saveExperiment} />}
 
       <footer className="compare-footer">
-          <span>数据快照 <code>KeyanHu-workspace</code><button className="reading-help" aria-label="查看时间图阅读说明"><CircleHelp size={12} /><span><b>读图说明</b>横轴为实验内相对时间；色带颜色与时间位置一致；指向节点或连线会同步强调各实验中的同阶段，并显示该段耗时；实线表示已确认关系，虚线表示回推关系，灰点表示尚无关系；开口或斑点尾端表示未完成或证据缺口；右键实验进入时间关系编辑器。</span></button></span>
+          <span>数据快照 <code>KeyanHu-workspace</code></span>
         <span>2026-08-25 10:33 · {logCount} logs · {activeExperiments.length} runs</span>
       </footer>
     </main>
