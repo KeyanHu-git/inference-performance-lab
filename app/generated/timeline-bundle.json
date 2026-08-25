@@ -1,0 +1,3275 @@
+{
+  "schemaVersion": "semantic-timeline/v1",
+  "generatedAt": "2026-08-25T12:15:05.784Z",
+  "parser": {
+    "name": "glm52-minimal-e2e",
+    "version": "0.1.0"
+  },
+  "evidence": [
+    {
+      "id": "prestage0",
+      "relativePath": "glm52-minimal-stage-20260825-01/prestage/rank-000.log",
+      "sha256": "e86df6ddd4ea28e6717d6fd3a5b3eb49d6da36b1d641a3a484064d846224019c",
+      "bytes": 591,
+      "lines": 2
+    },
+    {
+      "id": "prestage1",
+      "relativePath": "glm52-minimal-stage-20260825-01/prestage/rank-001.log",
+      "sha256": "55065001017c79dec9518ba359139a55774bd2dcaa7f5100fe95d95423965f0c",
+      "bytes": 591,
+      "lines": 2
+    },
+    {
+      "id": "service0",
+      "relativePath": "glm52-minimal-service-20260825-01/service/rank-000.log",
+      "sha256": "c913892ebcf9bb4b24953fc0027b8ad7ffdfb01fd327d5d33948cff85d9e7732",
+      "bytes": 146050,
+      "lines": 961
+    },
+    {
+      "id": "service1",
+      "relativePath": "glm52-minimal-service-20260825-01/service/rank-001.log",
+      "sha256": "14f08663de2cdc6b848e65b08944011a01e0940a934acb8a88ec9bb77729474c",
+      "bytes": 100133,
+      "lines": 613
+    },
+    {
+      "id": "result",
+      "relativePath": "结果.md",
+      "sha256": "1980c006f9ad54a55fc34a18823e6401d89aca07507551baab983be794ad3673",
+      "bytes": 1860,
+      "lines": 50
+    }
+  ],
+  "runs": [
+    {
+      "id": "glm-p8-e2e-20260825",
+      "model": "GLM-5.2 W8A8",
+      "label": "P=8 预置 · 完整流程",
+      "shortLabel": "P=8 · 完整流程",
+      "config": "TP16 · DP2 · EP · 32 NPU · 双节点 P=8 预置",
+      "startedAt": "2026-08-25T02:23:12.463Z",
+      "totalSeconds": 566.54,
+      "mainWeightSeconds": 49.6,
+      "status": "complete",
+      "statusLabel": "已完成 · 生成验证",
+      "rootNodeId": "run",
+      "nodes": [
+        {
+          "id": "run",
+          "parentId": null,
+          "semanticKey": "run",
+          "subjectRef": "glm-p8-e2e-20260825",
+          "label": "GLM-5.2 P=8 完整流程",
+          "kind": "run",
+          "start": 0,
+          "end": 566.54,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "双节点预置、推理启动与接口验证",
+          "evidence": [
+            {
+              "evidenceId": "prestage0",
+              "lineStart": 1,
+              "lineEnd": 1
+            },
+            {
+              "evidenceId": "result",
+              "lineStart": 26,
+              "lineEnd": 26
+            }
+          ]
+        },
+        {
+          "id": "phase-prestage",
+          "parentId": "run",
+          "semanticKey": "prestage",
+          "subjectRef": "cluster",
+          "label": "P=8 模型预置",
+          "kind": "phase",
+          "start": 0,
+          "end": 156.951,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "两个节点从共享存储并行复制模型到 RAM Disk",
+          "evidence": [
+            {
+              "evidenceId": "prestage0",
+              "lineStart": 1,
+              "lineEnd": 1
+            },
+            {
+              "evidenceId": "prestage1",
+              "lineStart": 1,
+              "lineEnd": 1
+            }
+          ]
+        },
+        {
+          "id": "prestage-node-0",
+          "parentId": "phase-prestage",
+          "semanticKey": "prestage.node",
+          "subjectRef": "node:0",
+          "label": "节点0预置完成",
+          "kind": "activity",
+          "start": 0,
+          "end": 156.951,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "复制 743.10 GiB，耗时 156.95 s",
+          "evidence": [
+            {
+              "evidenceId": "prestage0",
+              "lineStart": 1,
+              "lineEnd": 1
+            }
+          ]
+        },
+        {
+          "id": "prestage-node-1",
+          "parentId": "phase-prestage",
+          "semanticKey": "prestage.node",
+          "subjectRef": "node:1",
+          "label": "节点1预置完成",
+          "kind": "activity",
+          "start": 0.014,
+          "end": 143.384,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "复制 743.10 GiB，耗时 143.37 s",
+          "evidence": [
+            {
+              "evidenceId": "prestage1",
+              "lineStart": 1,
+              "lineEnd": 1
+            }
+          ]
+        },
+        {
+          "id": "phase-service",
+          "parentId": "run",
+          "semanticKey": "service.startup",
+          "subjectRef": "service",
+          "label": "推理服务启动",
+          "kind": "phase",
+          "start": 187.537,
+          "end": 566.54,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "保持原 GLM-5.2 TP16、DP2、EP、MTP 参数",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 2,
+              "lineEnd": 2
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 2,
+              "lineEnd": 2
+            }
+          ]
+        },
+        {
+          "id": "service-start",
+          "parentId": "phase-service",
+          "semanticKey": "service.process.start",
+          "subjectRef": "service",
+          "label": "vLLM 启动",
+          "kind": "event",
+          "start": 187.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "两节点服务进程开始启动",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 2,
+              "lineEnd": 2
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 2,
+              "lineEnd": 2
+            }
+          ]
+        },
+        {
+          "id": "phase-engine",
+          "parentId": "phase-service",
+          "semanticKey": "engine.initialize",
+          "subjectRef": "engine",
+          "label": "Engine 初始化",
+          "kind": "phase",
+          "start": 232.537,
+          "end": 545.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "两个数据并行实例开始建立 EngineCore",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 49,
+              "lineEnd": 49
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 40,
+              "lineEnd": 40
+            }
+          ]
+        },
+        {
+          "id": "engine-start",
+          "parentId": "phase-engine",
+          "semanticKey": "engine.start",
+          "subjectRef": "engine",
+          "label": "Engine 初始化开始",
+          "kind": "event",
+          "start": 232.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "DP0 与 DP1 在同一秒开始初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 49,
+              "lineEnd": 49
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 40,
+              "lineEnd": 40
+            }
+          ]
+        },
+        {
+          "id": "phase-workers",
+          "parentId": "phase-engine",
+          "semanticKey": "worker.initialize",
+          "subjectRef": "workers",
+          "label": "Worker 初始化",
+          "kind": "phase",
+          "start": 249.537,
+          "end": 252.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "32 个 Worker 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 139,
+              "lineEnd": 139
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 141,
+              "lineEnd": 141
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 142,
+              "lineEnd": 142
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 144,
+              "lineEnd": 144
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 145,
+              "lineEnd": 145
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 146,
+              "lineEnd": 146
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 147,
+              "lineEnd": 147
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 148,
+              "lineEnd": 148
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 149,
+              "lineEnd": 149
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 150,
+              "lineEnd": 150
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 151,
+              "lineEnd": 151
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 152,
+              "lineEnd": 152
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 153,
+              "lineEnd": 153
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 154,
+              "lineEnd": 154
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 155,
+              "lineEnd": 155
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 156,
+              "lineEnd": 156
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 58,
+              "lineEnd": 58
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 59,
+              "lineEnd": 59
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 60,
+              "lineEnd": 60
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 61,
+              "lineEnd": 61
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 62,
+              "lineEnd": 62
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 63,
+              "lineEnd": 63
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 64,
+              "lineEnd": 64
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 65,
+              "lineEnd": 65
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 66,
+              "lineEnd": 66
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 67,
+              "lineEnd": 67
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 68,
+              "lineEnd": 68
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 69,
+              "lineEnd": 69
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 70,
+              "lineEnd": 70
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 71,
+              "lineEnd": 71
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 72,
+              "lineEnd": 72
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 73,
+              "lineEnd": 73
+            }
+          ]
+        },
+        {
+          "id": "phase-workers-dp0",
+          "parentId": "phase-workers",
+          "semanticKey": "worker.initialize.dp",
+          "subjectRef": "dp:0",
+          "label": "DP0 Worker 初始化",
+          "kind": "phase",
+          "start": 249.537,
+          "end": 252.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "16 个 TP Worker 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 139,
+              "lineEnd": 139
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 141,
+              "lineEnd": 141
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 142,
+              "lineEnd": 142
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 144,
+              "lineEnd": 144
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 145,
+              "lineEnd": 145
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 146,
+              "lineEnd": 146
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 147,
+              "lineEnd": 147
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 148,
+              "lineEnd": 148
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 149,
+              "lineEnd": 149
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 150,
+              "lineEnd": 150
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 151,
+              "lineEnd": 151
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 152,
+              "lineEnd": 152
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 153,
+              "lineEnd": 153
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 154,
+              "lineEnd": 154
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 155,
+              "lineEnd": 155
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 156,
+              "lineEnd": 156
+            }
+          ]
+        },
+        {
+          "id": "phase-workers-dp1",
+          "parentId": "phase-workers",
+          "semanticKey": "worker.initialize.dp",
+          "subjectRef": "dp:1",
+          "label": "DP1 Worker 初始化",
+          "kind": "phase",
+          "start": 249.537,
+          "end": 252.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "16 个 TP Worker 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 58,
+              "lineEnd": 58
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 59,
+              "lineEnd": 59
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 60,
+              "lineEnd": 60
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 61,
+              "lineEnd": 61
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 62,
+              "lineEnd": 62
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 63,
+              "lineEnd": 63
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 64,
+              "lineEnd": 64
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 65,
+              "lineEnd": 65
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 66,
+              "lineEnd": 66
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 67,
+              "lineEnd": 67
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 68,
+              "lineEnd": 68
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 69,
+              "lineEnd": 69
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 70,
+              "lineEnd": 70
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 71,
+              "lineEnd": 71
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 72,
+              "lineEnd": 72
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 73,
+              "lineEnd": 73
+            }
+          ]
+        },
+        {
+          "id": "worker-init-0",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:14",
+          "label": "DP0 · TP14",
+          "kind": "event",
+          "start": 249.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 14 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 139,
+              "lineEnd": 139
+            }
+          ]
+        },
+        {
+          "id": "worker-init-1",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:13",
+          "label": "DP0 · TP13",
+          "kind": "event",
+          "start": 250.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 13 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 141,
+              "lineEnd": 141
+            }
+          ]
+        },
+        {
+          "id": "worker-init-2",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:9",
+          "label": "DP0 · TP9",
+          "kind": "event",
+          "start": 250.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 9 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 142,
+              "lineEnd": 142
+            }
+          ]
+        },
+        {
+          "id": "worker-init-3",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:12",
+          "label": "DP0 · TP12",
+          "kind": "event",
+          "start": 250.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 12 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 144,
+              "lineEnd": 144
+            }
+          ]
+        },
+        {
+          "id": "worker-init-4",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:2",
+          "label": "DP0 · TP2",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 2 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 145,
+              "lineEnd": 145
+            }
+          ]
+        },
+        {
+          "id": "worker-init-5",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:10",
+          "label": "DP0 · TP10",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 10 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 146,
+              "lineEnd": 146
+            }
+          ]
+        },
+        {
+          "id": "worker-init-6",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:1",
+          "label": "DP0 · TP1",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 1 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 147,
+              "lineEnd": 147
+            }
+          ]
+        },
+        {
+          "id": "worker-init-7",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:6",
+          "label": "DP0 · TP6",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 6 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 148,
+              "lineEnd": 148
+            }
+          ]
+        },
+        {
+          "id": "worker-init-8",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:5",
+          "label": "DP0 · TP5",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 5 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 149,
+              "lineEnd": 149
+            }
+          ]
+        },
+        {
+          "id": "worker-init-9",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:8",
+          "label": "DP0 · TP8",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 8 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 150,
+              "lineEnd": 150
+            }
+          ]
+        },
+        {
+          "id": "worker-init-10",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:3",
+          "label": "DP0 · TP3",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 3 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 151,
+              "lineEnd": 151
+            }
+          ]
+        },
+        {
+          "id": "worker-init-11",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:15",
+          "label": "DP0 · TP15",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 15 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 152,
+              "lineEnd": 152
+            }
+          ]
+        },
+        {
+          "id": "worker-init-12",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:4",
+          "label": "DP0 · TP4",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 4 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 153,
+              "lineEnd": 153
+            }
+          ]
+        },
+        {
+          "id": "worker-init-13",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:0",
+          "label": "DP0 · TP0",
+          "kind": "event",
+          "start": 252.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 0 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 154,
+              "lineEnd": 154
+            }
+          ]
+        },
+        {
+          "id": "worker-init-14",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:11",
+          "label": "DP0 · TP11",
+          "kind": "event",
+          "start": 252.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 11 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 155,
+              "lineEnd": 155
+            }
+          ]
+        },
+        {
+          "id": "worker-init-15",
+          "parentId": "phase-workers-dp0",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:0/tp:7",
+          "label": "DP0 · TP7",
+          "kind": "event",
+          "start": 252.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 7 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 156,
+              "lineEnd": 156
+            }
+          ]
+        },
+        {
+          "id": "worker-init-16",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:13",
+          "label": "DP1 · TP13",
+          "kind": "event",
+          "start": 249.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 29 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 58,
+              "lineEnd": 58
+            }
+          ]
+        },
+        {
+          "id": "worker-init-17",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:7",
+          "label": "DP1 · TP7",
+          "kind": "event",
+          "start": 250.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 23 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 59,
+              "lineEnd": 59
+            }
+          ]
+        },
+        {
+          "id": "worker-init-18",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:11",
+          "label": "DP1 · TP11",
+          "kind": "event",
+          "start": 250.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 27 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 60,
+              "lineEnd": 60
+            }
+          ]
+        },
+        {
+          "id": "worker-init-19",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:12",
+          "label": "DP1 · TP12",
+          "kind": "event",
+          "start": 250.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 28 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 61,
+              "lineEnd": 61
+            }
+          ]
+        },
+        {
+          "id": "worker-init-20",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:15",
+          "label": "DP1 · TP15",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 31 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 62,
+              "lineEnd": 62
+            }
+          ]
+        },
+        {
+          "id": "worker-init-21",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:1",
+          "label": "DP1 · TP1",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 17 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 63,
+              "lineEnd": 63
+            }
+          ]
+        },
+        {
+          "id": "worker-init-22",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:10",
+          "label": "DP1 · TP10",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 26 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 64,
+              "lineEnd": 64
+            }
+          ]
+        },
+        {
+          "id": "worker-init-23",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:0",
+          "label": "DP1 · TP0",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 16 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 65,
+              "lineEnd": 65
+            }
+          ]
+        },
+        {
+          "id": "worker-init-24",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:3",
+          "label": "DP1 · TP3",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 19 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 66,
+              "lineEnd": 66
+            }
+          ]
+        },
+        {
+          "id": "worker-init-25",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:14",
+          "label": "DP1 · TP14",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 30 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 67,
+              "lineEnd": 67
+            }
+          ]
+        },
+        {
+          "id": "worker-init-26",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:8",
+          "label": "DP1 · TP8",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 24 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 68,
+              "lineEnd": 68
+            }
+          ]
+        },
+        {
+          "id": "worker-init-27",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:6",
+          "label": "DP1 · TP6",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 22 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 69,
+              "lineEnd": 69
+            }
+          ]
+        },
+        {
+          "id": "worker-init-28",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:5",
+          "label": "DP1 · TP5",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 21 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 70,
+              "lineEnd": 70
+            }
+          ]
+        },
+        {
+          "id": "worker-init-29",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:4",
+          "label": "DP1 · TP4",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 20 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 71,
+              "lineEnd": 71
+            }
+          ]
+        },
+        {
+          "id": "worker-init-30",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:2",
+          "label": "DP1 · TP2",
+          "kind": "event",
+          "start": 251.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 18 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 72,
+              "lineEnd": 72
+            }
+          ]
+        },
+        {
+          "id": "worker-init-31",
+          "parentId": "phase-workers-dp1",
+          "semanticKey": "worker.initialize.done",
+          "subjectRef": "dp:1/tp:9",
+          "label": "DP1 · TP9",
+          "kind": "event",
+          "start": 252.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "全局 Rank 25 完成分布式环境初始化",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 73,
+              "lineEnd": 73
+            }
+          ]
+        },
+        {
+          "id": "phase-weights",
+          "parentId": "phase-engine",
+          "semanticKey": "weights.load",
+          "subjectRef": "model:main+mtp",
+          "label": "权重加载",
+          "kind": "phase",
+          "start": 255.537,
+          "end": 343.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "32 个 Worker 加载主权重，随后加载 MTP 权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 292,
+              "lineEnd": 292
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 293,
+              "lineEnd": 293
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 294,
+              "lineEnd": 294
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 297,
+              "lineEnd": 297
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 298,
+              "lineEnd": 298
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 310,
+              "lineEnd": 310
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 312,
+              "lineEnd": 312
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 313,
+              "lineEnd": 313
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 317,
+              "lineEnd": 317
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 319,
+              "lineEnd": 319
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 321,
+              "lineEnd": 321
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 324,
+              "lineEnd": 324
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 327,
+              "lineEnd": 327
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 329,
+              "lineEnd": 329
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 331,
+              "lineEnd": 331
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 333,
+              "lineEnd": 333
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 222,
+              "lineEnd": 222
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 224,
+              "lineEnd": 224
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 227,
+              "lineEnd": 227
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 229,
+              "lineEnd": 229
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 232,
+              "lineEnd": 232
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 233,
+              "lineEnd": 233
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 235,
+              "lineEnd": 235
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 236,
+              "lineEnd": 236
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 237,
+              "lineEnd": 237
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 239,
+              "lineEnd": 239
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 241,
+              "lineEnd": 241
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 242,
+              "lineEnd": 242
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 244,
+              "lineEnd": 244
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 247,
+              "lineEnd": 247
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 248,
+              "lineEnd": 248
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 250,
+              "lineEnd": 250
+            }
+          ]
+        },
+        {
+          "id": "phase-main-weights",
+          "parentId": "phase-weights",
+          "semanticKey": "weights.main",
+          "subjectRef": "model:main",
+          "label": "主权重加载",
+          "kind": "phase",
+          "start": 255.537,
+          "end": 322.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "两个 DP 分支并行加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 292,
+              "lineEnd": 292
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 293,
+              "lineEnd": 293
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 294,
+              "lineEnd": 294
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 297,
+              "lineEnd": 297
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 298,
+              "lineEnd": 298
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 310,
+              "lineEnd": 310
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 312,
+              "lineEnd": 312
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 313,
+              "lineEnd": 313
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 317,
+              "lineEnd": 317
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 319,
+              "lineEnd": 319
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 321,
+              "lineEnd": 321
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 324,
+              "lineEnd": 324
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 327,
+              "lineEnd": 327
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 329,
+              "lineEnd": 329
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 331,
+              "lineEnd": 331
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 333,
+              "lineEnd": 333
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 222,
+              "lineEnd": 222
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 224,
+              "lineEnd": 224
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 227,
+              "lineEnd": 227
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 229,
+              "lineEnd": 229
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 232,
+              "lineEnd": 232
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 233,
+              "lineEnd": 233
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 235,
+              "lineEnd": 235
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 236,
+              "lineEnd": 236
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 237,
+              "lineEnd": 237
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 239,
+              "lineEnd": 239
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 241,
+              "lineEnd": 241
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 242,
+              "lineEnd": 242
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 244,
+              "lineEnd": 244
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 247,
+              "lineEnd": 247
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 248,
+              "lineEnd": 248
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 250,
+              "lineEnd": 250
+            }
+          ]
+        },
+        {
+          "id": "phase-main-dp0",
+          "parentId": "phase-main-weights",
+          "semanticKey": "weights.main.dp",
+          "subjectRef": "dp:0",
+          "label": "DP0 主权重加载",
+          "kind": "phase",
+          "start": 255.537,
+          "end": 319.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "16 个 TP Worker 并行加载主权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 292,
+              "lineEnd": 292
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 293,
+              "lineEnd": 293
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 294,
+              "lineEnd": 294
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 297,
+              "lineEnd": 297
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 298,
+              "lineEnd": 298
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 310,
+              "lineEnd": 310
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 312,
+              "lineEnd": 312
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 313,
+              "lineEnd": 313
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 317,
+              "lineEnd": 317
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 319,
+              "lineEnd": 319
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 321,
+              "lineEnd": 321
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 324,
+              "lineEnd": 324
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 327,
+              "lineEnd": 327
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 329,
+              "lineEnd": 329
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 331,
+              "lineEnd": 331
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 333,
+              "lineEnd": 333
+            }
+          ]
+        },
+        {
+          "id": "phase-main-dp1",
+          "parentId": "phase-main-weights",
+          "semanticKey": "weights.main.dp",
+          "subjectRef": "dp:1",
+          "label": "DP1 主权重加载",
+          "kind": "phase",
+          "start": 255.537,
+          "end": 322.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "16 个 TP Worker 并行加载主权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 222,
+              "lineEnd": 222
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 224,
+              "lineEnd": 224
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 227,
+              "lineEnd": 227
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 229,
+              "lineEnd": 229
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 232,
+              "lineEnd": 232
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 233,
+              "lineEnd": 233
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 235,
+              "lineEnd": 235
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 236,
+              "lineEnd": 236
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 237,
+              "lineEnd": 237
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 239,
+              "lineEnd": 239
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 241,
+              "lineEnd": 241
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 242,
+              "lineEnd": 242
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 244,
+              "lineEnd": 244
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 247,
+              "lineEnd": 247
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 248,
+              "lineEnd": 248
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 250,
+              "lineEnd": 250
+            }
+          ]
+        },
+        {
+          "id": "weight-start",
+          "parentId": "phase-main-weights",
+          "semanticKey": "weights.main.start",
+          "subjectRef": "model:main",
+          "label": "32 Worker 权重开始",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "32 个 Worker 在 1.00 s 内进入主权重加载",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 292,
+              "lineEnd": 292
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 293,
+              "lineEnd": 293
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 294,
+              "lineEnd": 294
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 297,
+              "lineEnd": 297
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 298,
+              "lineEnd": 298
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 310,
+              "lineEnd": 310
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 312,
+              "lineEnd": 312
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 313,
+              "lineEnd": 313
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 317,
+              "lineEnd": 317
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 319,
+              "lineEnd": 319
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 321,
+              "lineEnd": 321
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 324,
+              "lineEnd": 324
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 327,
+              "lineEnd": 327
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 329,
+              "lineEnd": 329
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 331,
+              "lineEnd": 331
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 333,
+              "lineEnd": 333
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 222,
+              "lineEnd": 222
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 224,
+              "lineEnd": 224
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 227,
+              "lineEnd": 227
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 229,
+              "lineEnd": 229
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 232,
+              "lineEnd": 232
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 233,
+              "lineEnd": 233
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 235,
+              "lineEnd": 235
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 236,
+              "lineEnd": 236
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 237,
+              "lineEnd": 237
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 239,
+              "lineEnd": 239
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 241,
+              "lineEnd": 241
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 242,
+              "lineEnd": 242
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 244,
+              "lineEnd": 244
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 247,
+              "lineEnd": 247
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 248,
+              "lineEnd": 248
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 250,
+              "lineEnd": 250
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-0",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:2",
+          "label": "DP0 · TP2",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 292,
+              "lineEnd": 292
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-1",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:4",
+          "label": "DP0 · TP4",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 293,
+              "lineEnd": 293
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-2",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:3",
+          "label": "DP0 · TP3",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 294,
+              "lineEnd": 294
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-3",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:1",
+          "label": "DP0 · TP1",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 297,
+              "lineEnd": 297
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-4",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:0",
+          "label": "DP0 · TP0",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 298,
+              "lineEnd": 298
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-5",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:8",
+          "label": "DP0 · TP8",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 310,
+              "lineEnd": 310
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-6",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:11",
+          "label": "DP0 · TP11",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 312,
+              "lineEnd": 312
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-7",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:14",
+          "label": "DP0 · TP14",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 313,
+              "lineEnd": 313
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-8",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:7",
+          "label": "DP0 · TP7",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 317,
+              "lineEnd": 317
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-9",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:15",
+          "label": "DP0 · TP15",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 319,
+              "lineEnd": 319
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-10",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:9",
+          "label": "DP0 · TP9",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 321,
+              "lineEnd": 321
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-11",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:5",
+          "label": "DP0 · TP5",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 324,
+              "lineEnd": 324
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-12",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:6",
+          "label": "DP0 · TP6",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 327,
+              "lineEnd": 327
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-13",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:10",
+          "label": "DP0 · TP10",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 329,
+              "lineEnd": 329
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-14",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:12",
+          "label": "DP0 · TP12",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 331,
+              "lineEnd": 331
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-15",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:0/tp:13",
+          "label": "DP0 · TP13",
+          "kind": "event",
+          "start": 256.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 333,
+              "lineEnd": 333
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-16",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:2",
+          "label": "DP1 · TP2",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 222,
+              "lineEnd": 222
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-17",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:3",
+          "label": "DP1 · TP3",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 224,
+              "lineEnd": 224
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-18",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:14",
+          "label": "DP1 · TP14",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 227,
+              "lineEnd": 227
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-19",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:12",
+          "label": "DP1 · TP12",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 229,
+              "lineEnd": 229
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-20",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:9",
+          "label": "DP1 · TP9",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 232,
+              "lineEnd": 232
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-21",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:6",
+          "label": "DP1 · TP6",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 233,
+              "lineEnd": 233
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-22",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:5",
+          "label": "DP1 · TP5",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 235,
+              "lineEnd": 235
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-23",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:0",
+          "label": "DP1 · TP0",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 236,
+              "lineEnd": 236
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-24",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:4",
+          "label": "DP1 · TP4",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 237,
+              "lineEnd": 237
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-25",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:15",
+          "label": "DP1 · TP15",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 239,
+              "lineEnd": 239
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-26",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:8",
+          "label": "DP1 · TP8",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 241,
+              "lineEnd": 241
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-27",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:1",
+          "label": "DP1 · TP1",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 242,
+              "lineEnd": 242
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-28",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:13",
+          "label": "DP1 · TP13",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 244,
+              "lineEnd": 244
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-29",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:7",
+          "label": "DP1 · TP7",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 247,
+              "lineEnd": 247
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-30",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:11",
+          "label": "DP1 · TP11",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 248,
+              "lineEnd": 248
+            }
+          ]
+        },
+        {
+          "id": "weight-worker-31",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.worker.start",
+          "subjectRef": "dp:1/tp:10",
+          "label": "DP1 · TP10",
+          "kind": "event",
+          "start": 255.537,
+          "boundary": "observed",
+          "importance": "raw",
+          "detail": "开始加载主模型权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 250,
+              "lineEnd": 250
+            }
+          ]
+        },
+        {
+          "id": "main-dp0",
+          "parentId": "phase-main-dp0",
+          "semanticKey": "weights.main.done",
+          "subjectRef": "dp:0",
+          "label": "DP0 主权重",
+          "kind": "activity",
+          "start": 319.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "主权重加载耗时 47.10 s",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 533,
+              "lineEnd": 533
+            }
+          ]
+        },
+        {
+          "id": "main-dp1",
+          "parentId": "phase-main-dp1",
+          "semanticKey": "weights.main.done",
+          "subjectRef": "dp:1",
+          "label": "DP1 主权重",
+          "kind": "activity",
+          "start": 322.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "主权重加载耗时 49.60 s",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 272,
+              "lineEnd": 272
+            }
+          ]
+        },
+        {
+          "id": "phase-mtp-weights",
+          "parentId": "phase-weights",
+          "semanticKey": "weights.mtp",
+          "subjectRef": "model:mtp",
+          "label": "MTP 权重加载",
+          "kind": "phase",
+          "start": 335.537,
+          "end": 343.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "两个 DP 分支加载 MTP 补充权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 555,
+              "lineEnd": 555
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 296,
+              "lineEnd": 296
+            }
+          ]
+        },
+        {
+          "id": "phase-mtp-dp0",
+          "parentId": "phase-mtp-weights",
+          "semanticKey": "weights.mtp.dp",
+          "subjectRef": "dp:0",
+          "label": "DP0 MTP 权重",
+          "kind": "phase",
+          "start": 335.537,
+          "end": 337.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "DP0 加载 MTP 补充权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 555,
+              "lineEnd": 555
+            }
+          ]
+        },
+        {
+          "id": "phase-mtp-dp1",
+          "parentId": "phase-mtp-weights",
+          "semanticKey": "weights.mtp.dp",
+          "subjectRef": "dp:1",
+          "label": "DP1 MTP 权重",
+          "kind": "phase",
+          "start": 339.537,
+          "end": 343.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "DP1 加载 MTP 补充权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 296,
+              "lineEnd": 296
+            }
+          ]
+        },
+        {
+          "id": "mtp-start-dp0",
+          "parentId": "phase-mtp-dp0",
+          "semanticKey": "weights.mtp.start",
+          "subjectRef": "dp:0",
+          "label": "DP0 MTP 开始",
+          "kind": "event",
+          "start": 335.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "开始加载 MTP 补充权重",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 555,
+              "lineEnd": 555
+            }
+          ]
+        },
+        {
+          "id": "mtp-start-dp1",
+          "parentId": "phase-mtp-dp1",
+          "semanticKey": "weights.mtp.start",
+          "subjectRef": "dp:1",
+          "label": "DP1 MTP 开始",
+          "kind": "event",
+          "start": 339.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "开始加载 MTP 补充权重",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 296,
+              "lineEnd": 296
+            }
+          ]
+        },
+        {
+          "id": "mtp-dp0",
+          "parentId": "phase-mtp-dp0",
+          "semanticKey": "weights.mtp.done",
+          "subjectRef": "dp:0",
+          "label": "MTP · DP0",
+          "kind": "activity",
+          "start": 337.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "MTP 权重加载耗时 0.91 s",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 665,
+              "lineEnd": 665
+            }
+          ]
+        },
+        {
+          "id": "mtp-dp1",
+          "parentId": "phase-mtp-dp1",
+          "semanticKey": "weights.mtp.done",
+          "subjectRef": "dp:1",
+          "label": "MTP · DP1",
+          "kind": "activity",
+          "start": 343.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "MTP 权重加载耗时 2.83 s",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 398,
+              "lineEnd": 398
+            }
+          ]
+        },
+        {
+          "id": "phase-compile",
+          "parentId": "phase-engine",
+          "semanticKey": "model.compile",
+          "subjectRef": "dp:0+1",
+          "label": "模型编译",
+          "kind": "phase",
+          "start": 345.727,
+          "end": 379.537,
+          "boundary": "derived",
+          "importance": "diagnostic",
+          "detail": "记录两轮 torch.compile 完成点",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 733,
+              "lineEnd": 733
+            },
+            {
+              "evidenceId": "service0",
+              "lineStart": 771,
+              "lineEnd": 771
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 465,
+              "lineEnd": 465
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 503,
+              "lineEnd": 503
+            }
+          ]
+        },
+        {
+          "id": "compile-0",
+          "parentId": "phase-compile",
+          "semanticKey": "model.compile.done",
+          "subjectRef": "dp:0",
+          "label": "DP0 编译 1",
+          "kind": "event",
+          "start": 372.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "该轮 torch.compile 耗时 26.34 s",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 733,
+              "lineEnd": 733
+            }
+          ]
+        },
+        {
+          "id": "compile-1",
+          "parentId": "phase-compile",
+          "semanticKey": "model.compile.done",
+          "subjectRef": "dp:0",
+          "label": "DP0 编译 2",
+          "kind": "event",
+          "start": 379.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "该轮 torch.compile 耗时 1.00 s",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 771,
+              "lineEnd": 771
+            }
+          ]
+        },
+        {
+          "id": "compile-2",
+          "parentId": "phase-compile",
+          "semanticKey": "model.compile.done",
+          "subjectRef": "dp:1",
+          "label": "DP1 编译 1",
+          "kind": "event",
+          "start": 369.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "该轮 torch.compile 耗时 23.81 s",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 465,
+              "lineEnd": 465
+            }
+          ]
+        },
+        {
+          "id": "compile-3",
+          "parentId": "phase-compile",
+          "semanticKey": "model.compile.done",
+          "subjectRef": "dp:1",
+          "label": "DP1 编译 2",
+          "kind": "event",
+          "start": 379.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "该轮 torch.compile 耗时 0.97 s",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 503,
+              "lineEnd": 503
+            }
+          ]
+        },
+        {
+          "id": "phase-kv",
+          "parentId": "phase-engine",
+          "semanticKey": "kv_cache.allocate",
+          "subjectRef": "dp:0+1",
+          "label": "KV Cache 分配",
+          "kind": "phase",
+          "start": 385.537,
+          "end": 386.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "两节点可用 KV Cache 均为 27.93 GiB",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 773,
+              "lineEnd": 773
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 505,
+              "lineEnd": 505
+            }
+          ]
+        },
+        {
+          "id": "kv-dp0",
+          "parentId": "phase-kv",
+          "semanticKey": "kv_cache.available",
+          "subjectRef": "dp:0",
+          "label": "DP0 KV Cache",
+          "kind": "event",
+          "start": 385.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "可用 27.93 GiB",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 773,
+              "lineEnd": 773
+            }
+          ]
+        },
+        {
+          "id": "kv-dp1",
+          "parentId": "phase-kv",
+          "semanticKey": "kv_cache.available",
+          "subjectRef": "dp:1",
+          "label": "DP1 KV Cache",
+          "kind": "event",
+          "start": 386.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "可用 27.93 GiB",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 505,
+              "lineEnd": 505
+            }
+          ]
+        },
+        {
+          "id": "phase-graph",
+          "parentId": "phase-engine",
+          "semanticKey": "graph.capture",
+          "subjectRef": "dp:0+1",
+          "label": "Graph 捕获",
+          "kind": "phase",
+          "start": 388.537,
+          "end": 527.537,
+          "boundary": "derived",
+          "importance": "key",
+          "detail": "两个数据并行实例分别捕获 NPU Graph",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 808,
+              "lineEnd": 808
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 535,
+              "lineEnd": 535
+            }
+          ]
+        },
+        {
+          "id": "graph-start",
+          "parentId": "phase-graph",
+          "semanticKey": "graph.capture.start",
+          "subjectRef": "dp:0+1",
+          "label": "Graph 开始",
+          "kind": "event",
+          "start": 388.537,
+          "boundary": "derived",
+          "importance": "key",
+          "detail": "依据完成时间和 138 s 耗时回推",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 808,
+              "lineEnd": 808
+            },
+            {
+              "evidenceId": "service1",
+              "lineStart": 535,
+              "lineEnd": 535
+            }
+          ]
+        },
+        {
+          "id": "graph-dp1",
+          "parentId": "phase-graph",
+          "semanticKey": "graph.capture.done",
+          "subjectRef": "dp:1",
+          "label": "Graph · DP1",
+          "kind": "activity",
+          "start": 526.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "Graph 捕获耗时 138 s",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 535,
+              "lineEnd": 535
+            }
+          ]
+        },
+        {
+          "id": "graph-dp0",
+          "parentId": "phase-graph",
+          "semanticKey": "graph.capture.done",
+          "subjectRef": "dp:0",
+          "label": "Graph 完成",
+          "kind": "activity",
+          "start": 527.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "Graph 捕获耗时 138 s",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 808,
+              "lineEnd": 808
+            }
+          ]
+        },
+        {
+          "id": "engine-dp1",
+          "parentId": "phase-engine",
+          "semanticKey": "engine.done",
+          "subjectRef": "dp:1",
+          "label": "Engine · DP1",
+          "kind": "activity",
+          "start": 543.537,
+          "boundary": "observed",
+          "importance": "diagnostic",
+          "detail": "Engine 初始化耗时 198.11 s",
+          "evidence": [
+            {
+              "evidenceId": "service1",
+              "lineStart": 607,
+              "lineEnd": 607
+            }
+          ]
+        },
+        {
+          "id": "engine-dp0",
+          "parentId": "phase-engine",
+          "semanticKey": "engine.done",
+          "subjectRef": "dp:0",
+          "label": "Engine 完成",
+          "kind": "activity",
+          "start": 545.537,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "Engine 初始化耗时 206.13 s",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 876,
+              "lineEnd": 876
+            }
+          ]
+        },
+        {
+          "id": "service-ready",
+          "parentId": "phase-service",
+          "semanticKey": "service.verified",
+          "subjectRef": "api",
+          "label": "首次 HTTP 200",
+          "kind": "event",
+          "start": 566.54,
+          "boundary": "observed",
+          "importance": "key",
+          "detail": "/health、/v1/models 与真实生成请求均为 HTTP 200",
+          "evidence": [
+            {
+              "evidenceId": "service0",
+              "lineStart": 957,
+              "lineEnd": 960
+            },
+            {
+              "evidenceId": "result",
+              "lineStart": 25,
+              "lineEnd": 25
+            },
+            {
+              "evidenceId": "result",
+              "lineStart": 26,
+              "lineEnd": 26
+            }
+          ]
+        }
+      ],
+      "relations": [
+        {
+          "id": "r-prestage-0",
+          "from": "prestage-node-1",
+          "to": "prestage-node-0",
+          "kind": "sequence",
+          "origin": "observed"
+        },
+        {
+          "id": "r-service-engine",
+          "from": "service-start",
+          "to": "engine-start",
+          "kind": "sequence",
+          "origin": "observed"
+        },
+        {
+          "id": "r-engine-workers",
+          "from": "engine-start",
+          "to": "weight-start",
+          "kind": "sequence",
+          "origin": "observed",
+          "detailNodeIds": [
+            "worker-init-0",
+            "worker-init-16",
+            "worker-init-3",
+            "worker-init-1",
+            "worker-init-2",
+            "worker-init-18",
+            "worker-init-19",
+            "worker-init-17",
+            "worker-init-6",
+            "worker-init-5",
+            "worker-init-11",
+            "worker-init-4",
+            "worker-init-10",
+            "worker-init-12",
+            "worker-init-8",
+            "worker-init-7",
+            "worker-init-9",
+            "worker-init-23",
+            "worker-init-21",
+            "worker-init-22",
+            "worker-init-25",
+            "worker-init-20",
+            "worker-init-30",
+            "worker-init-24",
+            "worker-init-29",
+            "worker-init-28",
+            "worker-init-27",
+            "worker-init-26",
+            "worker-init-13",
+            "worker-init-14",
+            "worker-init-15",
+            "worker-init-31"
+          ]
+        },
+        {
+          "id": "r-weight-dp0",
+          "from": "weight-start",
+          "to": "main-dp0",
+          "kind": "branch",
+          "origin": "observed",
+          "detailNodeIds": [
+            "weight-worker-4",
+            "weight-worker-3",
+            "weight-worker-13",
+            "weight-worker-6",
+            "weight-worker-14",
+            "weight-worker-7",
+            "weight-worker-9",
+            "weight-worker-0",
+            "weight-worker-2",
+            "weight-worker-1",
+            "weight-worker-11",
+            "weight-worker-12",
+            "weight-worker-8",
+            "weight-worker-5",
+            "weight-worker-10",
+            "weight-worker-15"
+          ]
+        },
+        {
+          "id": "r-weight-dp1",
+          "from": "weight-start",
+          "to": "main-dp1",
+          "kind": "branch",
+          "origin": "observed",
+          "detailNodeIds": [
+            "weight-worker-23",
+            "weight-worker-27",
+            "weight-worker-31",
+            "weight-worker-30",
+            "weight-worker-19",
+            "weight-worker-28",
+            "weight-worker-18",
+            "weight-worker-25",
+            "weight-worker-16",
+            "weight-worker-17",
+            "weight-worker-24",
+            "weight-worker-22",
+            "weight-worker-21",
+            "weight-worker-29",
+            "weight-worker-26",
+            "weight-worker-20"
+          ]
+        },
+        {
+          "id": "r-dp0-mtp",
+          "from": "main-dp0",
+          "to": "mtp-dp0",
+          "kind": "sequence",
+          "origin": "observed",
+          "detailNodeIds": [
+            "mtp-start-dp0"
+          ]
+        },
+        {
+          "id": "r-dp1-mtp",
+          "from": "main-dp1",
+          "to": "mtp-dp1",
+          "kind": "sequence",
+          "origin": "observed",
+          "detailNodeIds": [
+            "mtp-start-dp1"
+          ]
+        },
+        {
+          "id": "r-mtp0-graph",
+          "from": "mtp-dp0",
+          "to": "graph-start",
+          "kind": "join",
+          "origin": "observed",
+          "detailNodeIds": [
+            "compile-0",
+            "compile-1",
+            "kv-dp0"
+          ]
+        },
+        {
+          "id": "r-mtp1-graph",
+          "from": "mtp-dp1",
+          "to": "graph-start",
+          "kind": "join",
+          "origin": "observed",
+          "detailNodeIds": [
+            "compile-2",
+            "compile-3",
+            "kv-dp1"
+          ]
+        },
+        {
+          "id": "r-graph-dp0",
+          "from": "graph-start",
+          "to": "graph-dp0",
+          "kind": "branch",
+          "origin": "inferred"
+        },
+        {
+          "id": "r-graph-dp1",
+          "from": "graph-start",
+          "to": "graph-dp1",
+          "kind": "branch",
+          "origin": "inferred"
+        },
+        {
+          "id": "r-graph-engine",
+          "from": "graph-dp0",
+          "to": "engine-dp0",
+          "kind": "join",
+          "origin": "observed"
+        },
+        {
+          "id": "r-engine-ready",
+          "from": "engine-dp0",
+          "to": "service-ready",
+          "kind": "sequence",
+          "origin": "observed"
+        }
+      ],
+      "projection": {
+        "nodeIds": [
+          "prestage-node-1",
+          "prestage-node-0",
+          "service-start",
+          "engine-start",
+          "weight-start",
+          "main-dp0",
+          "main-dp1",
+          "mtp-dp0",
+          "mtp-dp1",
+          "graph-start",
+          "graph-dp1",
+          "graph-dp0",
+          "engine-dp1",
+          "engine-dp0",
+          "service-ready"
+        ],
+        "relationIds": [
+          "r-prestage-0",
+          "r-service-engine",
+          "r-engine-workers",
+          "r-weight-dp0",
+          "r-weight-dp1",
+          "r-dp0-mtp",
+          "r-dp1-mtp",
+          "r-mtp0-graph",
+          "r-mtp1-graph",
+          "r-graph-dp0",
+          "r-graph-dp1",
+          "r-graph-engine",
+          "r-engine-ready"
+        ]
+      }
+    }
+  ],
+  "validation": {
+    "valid": true,
+    "errors": [],
+    "counts": {
+      "runs": 1,
+      "nodes": 104,
+      "relations": 13,
+      "evidence": 5
+    }
+  }
+}

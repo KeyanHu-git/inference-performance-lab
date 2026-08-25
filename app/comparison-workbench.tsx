@@ -245,6 +245,10 @@ function gradientSlice(start: number, end: number) {
 function segmentDetailNodes(experiment: RealExperiment, linkId: string) {
   const link = experiment.links.find((item) => item.id === linkId);
   if (!link) return [];
+  if (link.detailNodeIds?.length) {
+    const details = new Map((experiment.detailNodes ?? []).map((node) => [node.id, node]));
+    return link.detailNodeIds.map((id) => details.get(id)).filter((node): node is TimeNode => Boolean(node));
+  }
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   const source = nodes.get(link.from);
   const target = nodes.get(link.to);
@@ -469,9 +473,16 @@ function describeRelations(experiment: RealExperiment, node: TimeNode) {
   return `关系：${parts.join('；')}`;
 }
 
-export default function ComparisonWorkbench() {
-  const [experiments, setExperiments] = useState<RealExperiment[]>(realExperiments);
-  const [visibleIds, setVisibleIds] = useState(realExperiments.map((item) => item.id));
+export default function ComparisonWorkbench({ backendExperiments = [], backendEvidenceCount = 0 }: { backendExperiments?: RealExperiment[]; backendEvidenceCount?: number }) {
+  const builtInExperiments = useMemo(() => {
+    const backend = new Map(backendExperiments.map((item) => [item.id, item]));
+    return [
+      ...realExperiments.map((item) => backend.get(item.id) ?? item),
+      ...backendExperiments.filter((item) => !realExperiments.some((base) => base.id === item.id)),
+    ];
+  }, [backendExperiments]);
+  const [experiments, setExperiments] = useState<RealExperiment[]>(() => builtInExperiments);
+  const [visibleIds, setVisibleIds] = useState(() => builtInExperiments.map((item) => item.id));
   const [removedIds, setRemovedIds] = useState<string[]>([]);
   const [overrides, setOverrides] = useState<Record<string, RealExperiment>>({});
   const [workspaceReady, setWorkspaceReady] = useState(false);
@@ -490,7 +501,7 @@ export default function ComparisonWorkbench() {
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [editing, setEditing] = useState<RealExperiment | null>(null);
-  const [currentExperimentId, setCurrentExperimentId] = useState(realExperiments[0]?.id ?? '');
+  const [currentExperimentId, setCurrentExperimentId] = useState(builtInExperiments[0]?.id ?? '');
   const [labelWidth, setLabelWidth] = useState(162);
   const [hoveredRelation, setHoveredRelation] = useState<RelationTarget | null>(null);
   const [pinnedRelation, setPinnedRelation] = useState<RelationTarget | null>(null);
@@ -507,7 +518,14 @@ export default function ComparisonWorkbench() {
         const stored = JSON.parse(localStorage.getItem(WORKSPACE_KEY) ?? 'null') as WorkspaceState | null;
         if (stored) {
           const restoredOverrides = stored.overrides ?? {};
-          const builtIns = realExperiments.map((item) => normalizeExperiment(restoredOverrides[item.id] ?? item));
+          const builtIns = builtInExperiments.map((item) => {
+            const override = restoredOverrides[item.id];
+            if (!override) return normalizeExperiment(item);
+            if (item.source.startsWith('SemanticTimeline') && !override.source.startsWith('SemanticTimeline')) {
+              return normalizeExperiment({ ...item, shortName: override.shortName || item.shortName, note: override.note });
+            }
+            return normalizeExperiment(override);
+          });
           const imported = (stored.imported ?? []).map((item) => normalizeExperiment(restoredOverrides[item.id] ?? item));
           const restored = [...builtIns, ...imported.filter((item) => !builtIns.some((base) => base.id === item.id))];
           setExperiments(restored);
@@ -527,7 +545,7 @@ export default function ComparisonWorkbench() {
       setWorkspaceReady(true);
     }, 0);
     return () => window.clearTimeout(hydrate);
-  }, []);
+  }, [builtInExperiments]);
 
   useEffect(() => () => {
     if (relationClickTimer.current !== null) window.clearTimeout(relationClickTimer.current);
@@ -535,9 +553,9 @@ export default function ComparisonWorkbench() {
 
   useEffect(() => {
     if (!workspaceReady) return;
-    const imported = experiments.filter((item) => !realExperiments.some((base) => base.id === item.id));
+    const imported = experiments.filter((item) => !builtInExperiments.some((base) => base.id === item.id));
     localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds } satisfies WorkspaceState));
-  }, [experiments, overrides, removedIds, workspaceReady]);
+  }, [builtInExperiments, experiments, overrides, removedIds, workspaceReady]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -558,8 +576,8 @@ export default function ComparisonWorkbench() {
     return Math.ceil(longest / 300) * 300;
   }, [visibleExperiments]);
   const ticks = useMemo(() => Array.from({ length: Math.floor(maximumTime / 300) + 1 }, (_, index) => index * 300), [maximumTime]);
-  const importedCount = Math.max(0, experiments.length - realExperiments.length);
-  const logCount = realLogCount + importedCount;
+  const importedCount = Math.max(0, experiments.length - builtInExperiments.length);
+  const logCount = Math.max(realLogCount, backendEvidenceCount) + importedCount;
 
   function toggleExperiment(id: string) {
     const next = visibleIds.includes(id) ? visibleIds.filter((item) => item !== id) : [...visibleIds, id];
@@ -803,7 +821,17 @@ export default function ComparisonWorkbench() {
             const lens = createTimeLens(experiment, expandedLinkId, width, maximumTime);
             const positionAt = lens?.positionAt ?? ((time: number) => Math.max(0, Math.min(100, (time / experiment.total) * 100)));
             const displayWidth = lens?.displayWidth ?? width;
-            const laneY = createLaneLayout(experiment);
+            const expandedNodes = expandedLinkId ? segmentDetailNodes(experiment, expandedLinkId) : [];
+            const expandedNodeIds = new Set(expandedNodes.map((node) => node.id));
+            const expandedDetailLinks = expandedLinkId
+              ? (experiment.detailLinks ?? []).filter((link) => expandedNodeIds.has(link.from) || expandedNodeIds.has(link.to))
+              : [];
+            const renderExperiment: RealExperiment = expandedNodes.length ? {
+              ...experiment,
+              nodes: [...experiment.nodes, ...expandedNodes],
+              links: [...experiment.links.filter((link) => link.id !== expandedLinkId), ...expandedDetailLinks],
+            } : experiment;
+            const laneY = createLaneLayout(renderExperiment);
             return (
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}${lens ? ' has-time-lens' : ''}`}
@@ -861,7 +889,7 @@ export default function ComparisonWorkbench() {
                         </span>
                       )}
                       <RelationLayer
-                        experiment={experiment}
+                        experiment={renderExperiment}
                         selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
                         focusedStageKey={focusApplies && preferences.syncStages ? relationFocus?.stageKey : undefined}
                         focusedLinkId={focusApplies && !preferences.syncStages ? relationFocus?.linkId : undefined}
@@ -874,8 +902,8 @@ export default function ComparisonWorkbench() {
                         onLinkClick={handleRelationClick}
                         onLinkDoubleClick={handleRelationDoubleClick}
                       />
-                      {experiment.nodes.map((node) => {
-                        const hasInteractiveRelation = experiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
+                      {renderExperiment.nodes.map((node) => {
+                        const hasInteractiveRelation = renderExperiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
                         const relationState = !hasInteractiveRelation
                           ? 'unlinked'
                           : focusedLinks.length

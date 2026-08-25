@@ -11,6 +11,10 @@ export interface TimeNode {
   lane?: 0 | 1;
   detail: string;
   locator: string;
+  parentId?: string;
+  semanticKey?: string;
+  subjectRef?: string;
+  boundary?: 'observed' | 'derived' | 'declared';
 }
 
 export interface TimeLink {
@@ -20,6 +24,7 @@ export interface TimeLink {
   kind: LinkKind;
   origin: LinkOrigin;
   interactive?: boolean;
+  detailNodeIds?: string[];
 }
 
 export interface RealExperiment {
@@ -37,6 +42,8 @@ export interface RealExperiment {
   source: string;
   nodes: TimeNode[];
   links: TimeLink[];
+  detailNodes?: TimeNode[];
+  detailLinks?: TimeLink[];
 }
 
 export type ExperimentEvidence = Omit<RealExperiment, 'status' | 'statusLabel'>;

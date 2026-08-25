@@ -7,6 +7,8 @@
   },
   "scripts": {
     "dev": "vinext dev",
+    "data:compile": "node scripts/compile-glm52.mjs",
+    "timeline": "node scripts/timeline-cli.mjs",
     "build": "vinext build",
     "start": "vinext start",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next"
