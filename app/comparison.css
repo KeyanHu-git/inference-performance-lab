@@ -62,3 +62,9 @@ body{overflow:hidden;background:var(--cmp-bg);font-size:12px}
 
 /* Keep graph-editor lanes from changing timeline-node coordinates. */
 .embedded-node.lane-main{top:0;border-top:0}.graph-lane.graph-lane-a{top:24%}.graph-lane.graph-lane-main{top:50%;border-top-style:solid;border-top-color:rgba(104,232,220,.11)}.graph-lane.graph-lane-b{top:76%}
+
+/* Cross-run stage comparison: one semantic phase, all matching runs. */
+.comparison-board{border-left:0;border-right:0}
+.relation-link.is-active{stroke-width:1.45;filter:drop-shadow(0 0 2px rgba(104,232,220,.32))}.relation-link.is-dimmed{opacity:.1}
+.relation-duration{position:absolute;z-index:7;transform:translate(-50%,-50%);padding:2px 4px;border:1px solid rgba(215,238,240,.09);border-radius:8px;background:rgba(5,11,13,.56);color:rgba(225,240,240,.66);font:6.5px/1 var(--font-code);white-space:nowrap;pointer-events:none;backdrop-filter:blur(4px)}
+.embedded-node.is-stage-peer:after{transform:scale(1.38);background:#fff;box-shadow:0 0 0 2px rgba(104,232,220,.34),0 0 8px rgba(255,255,255,.5)}.embedded-node.is-stage-peer span{background:rgba(5,13,15,.9);border-color:rgba(104,232,220,.35);color:#fff}

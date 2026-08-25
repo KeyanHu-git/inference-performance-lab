@@ -6,7 +6,7 @@ import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
-type RelationFocus = { experimentId: string; linkId: string } | null;
+type RelationFocus = { stageKey: string } | null;
 type ParsedLine = { line: string; index: number; time?: number };
 type WorkspaceState = {
   imported: RealExperiment[];
@@ -120,6 +120,27 @@ function nodeLaneY(node: TimeNode) {
   return 25;
 }
 
+function nodeStageKey(node: TimeNode) {
+  const label = node.label.toLowerCase();
+  if (/预置/.test(label)) return 'prestage';
+  if (/graph|图捕获/.test(label)) return 'graph';
+  if (/vllm/.test(label)) return 'vllm';
+  if (/engine|引擎/.test(label)) return 'engine';
+  if (node.kind === 'ready' || /http|服务就绪/.test(label)) return 'ready';
+  if (node.kind === 'mtp' || /mtp/.test(label)) return 'mtp';
+  if (node.kind === 'rank' || /主权重|dp\d+\s*权重/.test(label)) return 'main-weight';
+  if (node.kind === 'progress' || /权重\s*(?:\d+%|\d+\/\d+)/.test(label)) return 'weight-progress';
+  if (/worker.*权重|权重开始/.test(label)) return 'weight-start';
+  return `${node.kind}:${label.replace(/\d+(?:\.\d+)?/g, '#').replace(/\s+/g, '')}`;
+}
+
+function linkStageKey(link: TimeLink, nodes: Map<string, TimeNode>) {
+  const source = nodes.get(link.from);
+  const target = nodes.get(link.to);
+  if (!source || !target) return link.id;
+  return `${nodeStageKey(source)}>${nodeStageKey(target)}`;
+}
+
 function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, duration: number) {
   const source = nodes.get(link.from);
   const target = nodes.get(link.to);
@@ -137,57 +158,74 @@ function relationPath(link: TimeLink, nodes: Map<string, TimeNode>, duration: nu
 function RelationLayer({
   experiment,
   selectedNodeId,
-  focusedLinkId,
+  focusedStageKey,
   onLinkFocus,
 }: {
   experiment: RealExperiment;
   selectedNodeId?: string;
-  focusedLinkId?: string;
-  onLinkFocus: (linkId?: string) => void;
+  focusedStageKey?: string;
+  onLinkFocus: (stageKey?: string) => void;
 }) {
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   return (
-    <svg className="relation-layer" viewBox="0 0 100 50" preserveAspectRatio="none" role="group" aria-label={`${experiment.shortName} 阶段关系`}>
-      {experiment.links.map((link) => {
-        const interactive = link.interactive !== false;
-        const active = interactive && (focusedLinkId ? focusedLinkId === link.id : selectedNodeId === link.from || selectedNodeId === link.to);
-        const dimmed = interactive && Boolean(focusedLinkId || selectedNodeId) && !active;
-        const path = relationPath(link, nodes, experiment.total);
-        const source = nodes.get(link.from)?.label ?? link.from;
-        const target = nodes.get(link.to)?.label ?? link.to;
-        return (
-          <g key={link.id}>
-            <path
-              className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}`}
-              d={path}
-              vectorEffect="non-scaling-stroke"
-              aria-hidden="true"
-            />
-            {interactive && (
+    <>
+      <svg className="relation-layer" viewBox="0 0 100 50" preserveAspectRatio="none" role="group" aria-label={`${experiment.shortName} 阶段关系`}>
+        {experiment.links.map((link) => {
+          const interactive = link.interactive !== false;
+          const stageKey = linkStageKey(link, nodes);
+          const active = interactive && (focusedStageKey ? focusedStageKey === stageKey : selectedNodeId === link.from || selectedNodeId === link.to);
+          const dimmed = interactive && Boolean(focusedStageKey || selectedNodeId) && !active;
+          const path = relationPath(link, nodes, experiment.total);
+          const source = nodes.get(link.from)?.label ?? link.from;
+          const target = nodes.get(link.to)?.label ?? link.to;
+          return (
+            <g key={link.id}>
               <path
-                className="relation-hit"
+                className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}`}
                 d={path}
                 vectorEffect="non-scaling-stroke"
-                tabIndex={0}
-                role="button"
-                aria-label={`${source} 至 ${target} 的时间关系`}
-                onPointerEnter={() => onLinkFocus(link.id)}
-                onPointerLeave={(event) => {
-                  if (document.activeElement !== event.currentTarget) onLinkFocus();
-                }}
-                onFocus={() => onLinkFocus(link.id)}
-                onBlur={() => onLinkFocus()}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  event.currentTarget.focus();
-                  onLinkFocus(link.id);
-                }}
+                aria-hidden="true"
               />
-            )}
-          </g>
+              {interactive && (
+                <path
+                  className="relation-hit"
+                  d={path}
+                  vectorEffect="non-scaling-stroke"
+                  tabIndex={0}
+                  role="button"
+                  aria-label={`${source} 至 ${target} 的时间关系`}
+                  onPointerEnter={() => onLinkFocus(stageKey)}
+                  onPointerLeave={(event) => {
+                    if (document.activeElement !== event.currentTarget) onLinkFocus();
+                  }}
+                  onFocus={() => onLinkFocus(stageKey)}
+                  onBlur={() => onLinkFocus()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    event.currentTarget.focus();
+                    onLinkFocus(stageKey);
+                  }}
+                />
+              )}
+            </g>
+          );
+        })}
+      </svg>
+      {focusedStageKey && experiment.links.map((link) => {
+        if (link.interactive === false || linkStageKey(link, nodes) !== focusedStageKey) return null;
+        const source = nodes.get(link.from);
+        const target = nodes.get(link.to);
+        if (!source || !target) return null;
+        const midpoint = ((source.time + target.time) / 2 / experiment.total) * 100;
+        const lane = (nodeLaneY(source) + nodeLaneY(target)) / 2;
+        const elapsed = Math.max(0, target.time - source.time);
+        return (
+          <span className="relation-duration" key={`${link.id}-duration`} style={{ left: `${midpoint}%`, top: `${lane}px` }} title={`${source.label} → ${target.label}：${formatSeconds(elapsed)}`}>
+            {formatSeconds(elapsed)}
+          </span>
         );
       })}
-    </svg>
+    </>
   );
 }
 
@@ -195,12 +233,14 @@ function NodeMarker({
   node,
   duration,
   selected,
+  stagePeer,
   relationState,
   onSelect,
 }: {
   node: TimeNode;
   duration: number;
   selected: boolean;
+  stagePeer: boolean;
   relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
   onSelect: (node: TimeNode, anchor: Selection['anchor']) => void;
 }) {
@@ -209,7 +249,7 @@ function NodeMarker({
   const edgeClass = position <= 1 ? 'edge-start' : position >= 88 ? 'edge-end' : '';
   return (
     <button
-      className={`embedded-node node-${node.kind} ${laneClass} ${edgeClass} relation-${relationState}${selected ? ' is-selected' : ''}`}
+      className={`embedded-node node-${node.kind} ${laneClass} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}`}
       style={{ left: `${position}%`, '--node-y': `${nodeLaneY(node)}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
@@ -471,9 +511,10 @@ export default function ComparisonWorkbench() {
               ? ((experiment.total - referenceExperiment.total) / referenceExperiment.total) * 100
               : undefined;
             const isBaseline = baselines[experiment.model] === experiment.id;
-            const focusedLink = relationFocus?.experimentId === experiment.id
-              ? experiment.links.find((link) => link.id === relationFocus.linkId)
-              : undefined;
+            const experimentNodes = new Map(experiment.nodes.map((node) => [node.id, node]));
+            const focusedLinks = relationFocus
+              ? experiment.links.filter((link) => linkStageKey(link, experimentNodes) === relationFocus.stageKey)
+              : [];
             return (
               <article
                 className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}`}
@@ -505,7 +546,7 @@ export default function ComparisonWorkbench() {
                   }}
                 >
                   <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>{experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}</div>
-                  <span className="label-actions"><Pencil className="row-edit-indicator" size={10} />{isBaseline && <i className="base-dot" title="当前模型基线" />}</span>
+                  <span className="label-actions">{isBaseline && <i className="base-dot" title="当前模型基线" />}</span>
                 </div>
 
                 <div className="band-track">
@@ -520,17 +561,17 @@ export default function ComparisonWorkbench() {
                     <RelationLayer
                       experiment={experiment}
                       selectedNodeId={selected?.experiment.id === experiment.id ? selected.node.id : undefined}
-                      focusedLinkId={focusedLink?.id}
-                      onLinkFocus={(linkId) => setRelationFocus(linkId ? { experimentId: experiment.id, linkId } : null)}
+                      focusedStageKey={relationFocus?.stageKey}
+                      onLinkFocus={(stageKey) => setRelationFocus(stageKey ? { stageKey } : null)}
                     />
                     {experiment.nodes.map((node) => {
                       const hasInteractiveRelation = experiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id));
                       const relationState = !hasInteractiveRelation
                         ? 'unlinked'
-                        : focusedLink
-                          ? focusedLink.from === node.id || focusedLink.to === node.id ? 'endpoint' : 'dimmed'
+                        : focusedLinks.length
+                          ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
                           : 'idle';
-                      return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
+                      return <NodeMarker key={node.id} node={node} duration={experiment.total} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} onSelect={(value, anchor) => setSelected({ experiment, node: value, anchor })} />;
                     })}
                   </div>
                 </div>
@@ -563,7 +604,7 @@ export default function ComparisonWorkbench() {
       {editing && <ExperimentEditor experiment={editing} onCancel={() => setEditing(null)} onSave={saveExperiment} />}
 
       <footer className="compare-footer">
-        <span>数据快照 <code>KeyanHu-workspace</code><button className="reading-help" aria-label="查看时间图阅读说明"><CircleHelp size={12} /><span><b>读图说明</b>横轴为实验内相对时间；色带颜色与时间位置一致；实线表示已确认关系，虚线表示回推关系，灰点表示尚无关系；开口或斑点尾端表示未完成或证据缺口；双击实验可编辑人工标注。</span></button></span>
+          <span>数据快照 <code>KeyanHu-workspace</code><button className="reading-help" aria-label="查看时间图阅读说明"><CircleHelp size={12} /><span><b>读图说明</b>横轴为实验内相对时间；色带颜色与时间位置一致；指向节点或连线会同步强调各实验中的同阶段，并显示该段耗时；实线表示已确认关系，虚线表示回推关系，灰点表示尚无关系；开口或斑点尾端表示未完成或证据缺口；右键实验进入时间关系编辑器。</span></button></span>
         <span>2026-08-25 10:33 · {logCount} logs · {activeExperiments.length} runs</span>
       </footer>
     </main>
