@@ -254,6 +254,20 @@ function allExperimentNodes(experiment: RealExperiment) {
   return new Map([...experiment.nodes, ...(experiment.detailNodes ?? [])].map((node) => [node.id, node]));
 }
 
+function hierarchyDepth(node: TimeNode, nodes: Map<string, TimeNode>) {
+  let depth = 0;
+  let current = node;
+  const visited = new Set<string>();
+  while (current.parentId && !visited.has(current.id)) {
+    visited.add(current.id);
+    const parent = nodes.get(current.parentId);
+    if (!parent) break;
+    depth += 1;
+    current = parent;
+  }
+  return depth;
+}
+
 function directPathChild(scopeId: string, leafId: string, nodes: Map<string, TimeNode>) {
   let current = nodes.get(leafId);
   const visited = new Set<string>();
@@ -394,6 +408,7 @@ function RelationLayer({
   expandedLinkId,
   onLinkHover,
   onLinkClick,
+  onLinkDoubleClick,
   onOpenMenu,
 }: {
   experiment: RealExperiment;
@@ -407,6 +422,7 @@ function RelationLayer({
   expandedLinkId?: string;
   onLinkHover: (target?: RelationTarget) => void;
   onLinkClick: (target: RelationTarget) => void;
+  onLinkDoubleClick: (target: RelationTarget) => void;
   onOpenMenu: (target: RelationTarget, clientX: number, clientY: number) => void;
 }) {
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
@@ -422,10 +438,11 @@ function RelationLayer({
           const source = nodes.get(link.from)?.label ?? link.from;
           const target = nodes.get(link.to)?.label ?? link.to;
           const relationTarget = { experimentId: experiment.id, linkId: link.id, stageKey };
+          const expandable = Boolean(link.detailNodeIds?.length);
           return (
             <g key={link.id}>
               <path
-                className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}${pinnedLinkId === link.id ? ' is-pinned' : ''}${expandedLinkId === link.id ? ' is-expanded' : ''}`}
+                className={`relation-link relation-${link.kind} origin-${link.origin}${interactive ? ' is-interactive' : ' is-static'}${active ? ' is-active' : ''}${dimmed ? ' is-dimmed' : ''}${pinnedLinkId === link.id ? ' is-pinned' : ''}${expandedLinkId === link.id ? ' is-expanded' : ''}${expandable ? ' is-expandable' : ''}`}
                 d={path}
                 vectorEffect="non-scaling-stroke"
                 aria-hidden="true"
@@ -447,6 +464,11 @@ function RelationLayer({
                   onClick={(event) => {
                     event.stopPropagation();
                     onLinkClick(relationTarget);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (expandable) onLinkDoubleClick(relationTarget);
                   }}
                   onContextMenu={(event) => {
                     event.preventDefault();
@@ -487,7 +509,9 @@ function NodeMarker({
   relationState,
   showLabel,
   expandable,
+  semanticDepth,
   onToggle,
+  onDrill,
   onOpenMenu,
 }: {
   node: TimeNode;
@@ -498,17 +522,27 @@ function NodeMarker({
   relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
   showLabel: boolean;
   expandable: boolean;
+  semanticDepth: number;
   onToggle: (node: TimeNode) => void;
+  onDrill: (node: TimeNode) => void;
   onOpenMenu: (node: TimeNode, clientX: number, clientY: number) => void;
 }) {
   const edgeClass = position <= 1 ? 'edge-start' : position >= 88 ? 'edge-end' : '';
+  const semanticClass = `semantic-${node.semanticKind ?? 'event'}`;
+  const importanceClass = `importance-${node.importance ?? 'key'}`;
+  const depthClass = `depth-${Math.min(6, semanticDepth)}`;
   return (
     <button
-      className={`embedded-node node-${node.kind} ${laneClass(y)} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}${showLabel ? '' : ' is-label-hidden'}${expandable ? ' is-expandable' : ''}`}
+      className={`embedded-node node-${node.kind} ${semanticClass} ${importanceClass} ${depthClass} ${laneClass(y)} ${edgeClass} relation-${relationState}${stagePeer ? ' is-stage-peer' : ''}${selected ? ' is-selected' : ''}${showLabel ? '' : ' is-label-hidden'}${expandable ? ' is-expandable' : ''}`}
       style={{ left: `${position}%`, '--node-y': `${y}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
         onToggle(node);
+      }}
+      onDoubleClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (expandable) onDrill(node);
       }}
       onContextMenu={(event) => {
         event.preventDefault();
@@ -517,7 +551,7 @@ function NodeMarker({
       }}
       aria-label={`${node.label}，${formatSeconds(node.time)}，${node.detail}`}
       aria-pressed={selected}
-      title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail} · 右键打开节点菜单`}
+      title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail}${expandable ? ' · 双击展开下一级' : ''} · 右键打开节点菜单`}
     >
       <span>{node.label}</span>
     </button>
@@ -1286,6 +1320,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         expandedLinkId={expandedLinkId}
                         onLinkHover={(target) => setHoveredRelation(target ?? null)}
                         onLinkClick={handleRelationClick}
+                        onLinkDoubleClick={toggleRelationExpansion}
                         onOpenMenu={openRelationContextMenu}
                       />
                       {renderExperiment.nodes.map((node) => {
@@ -1296,7 +1331,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                             ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
                             : 'idle';
                         const expandable = expandedNodeIds.has(node.id) && Boolean(node.childIds?.length);
-                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} showLabel={visibleLabels.has(node.id)} expandable={expandable} onToggle={(value) => setSelected((current) => current?.experiment.id === experiment.id && current.node.id === value.id ? null : { experiment: renderExperiment, node: value })} onOpenMenu={(value, clientX, clientY) => openNodeContextMenu(experiment, value, clientX, clientY, expandable)} />;
+                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} showLabel={visibleLabels.has(node.id)} expandable={expandable} semanticDepth={hierarchyDepth(node, semanticNodes)} onToggle={(value) => setSelected((current) => current?.experiment.id === experiment.id && current.node.id === value.id ? null : { experiment: renderExperiment, node: value })} onDrill={(value) => drillIntoNode(experiment.id, value)} onOpenMenu={(value, clientX, clientY) => openNodeContextMenu(experiment, value, clientX, clientY, expandable)} />;
                       })}
                     </div>
                   </div>
