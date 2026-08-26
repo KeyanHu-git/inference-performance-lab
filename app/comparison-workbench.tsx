@@ -1,6 +1,6 @@
 'use client';
 
-import { Bookmark, Check, ChevronDown, CircleHelp, Eye, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, ChevronLeft, CircleHelp, Clock3, Eye, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
@@ -1171,6 +1171,15 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
         </div>
         <div className="toolbar-actions">
           <input ref={fileInput} className="file-input" type="file" accept=".log,.txt,text/plain" multiple onChange={importLogs} />
+          <button
+            className={`tool-button duration-toggle${preferences.showDurations ? ' is-active' : ''}`}
+            aria-pressed={preferences.showDurations}
+            aria-label={preferences.showDurations ? '隐藏阶段耗时' : '显示阶段耗时'}
+            title={preferences.showDurations ? '隐藏阶段耗时' : '显示阶段耗时'}
+            onClick={() => setPreferences((current) => ({ ...current, showDurations: !current.showDurations }))}
+          >
+            <Clock3 size={13} />耗时
+          </button>
           <div className="settings-wrap">
             <button className={`tool-button${settingsOpen ? ' is-active' : ''}`} aria-expanded={settingsOpen} onClick={() => { setSettingsOpen((open) => !open); setHelpOpen(false); setPickerOpen(false); }}>
               <Settings2 size={14} />设置
@@ -1226,6 +1235,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   <span><b>双击连线</b> 展开或收起下一级</span>
                   <span><b>单击节点</b> 锁定同阶段节点</span>
                   <span><b>双击节点</b> 进入下一级节点</span>
+                  <span><b>上一级／关闭</b> 返回一层或退出细分</span>
+                  <span><b>耗时</b> 显示或隐藏阶段用时</span>
                   <span><b>右键节点／连线</b> 打开属性</span>
                   <span><b>右键实验</b> 编辑标签、备注与关系</span>
                   <span><b>Ctrl + 滚轮</b> 围绕鼠标位置缩放</span>
@@ -1374,7 +1385,34 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                     }
                   }}
                 >
-                  <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>{experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}</div>
+                  <div>
+                    <strong>{experiment.model}</strong>
+                    <span>{experiment.shortName}</span>
+                    <small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>
+                    {!lens && experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}
+                    {lens && (
+                      <span className="row-lens-controls" role="group" aria-label={`${currentScope?.label ?? '细分节点'}层级控制`} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
+                        <button
+                          type="button"
+                          draggable={false}
+                          aria-label="返回上一级"
+                          title={expanded?.scopeStack.length ? '返回上一级' : '当前已是第一层'}
+                          disabled={!expanded?.scopeStack.length}
+                          onClick={(event) => { event.stopPropagation(); stepOutOfLens(experiment.id); }}
+                        ><ChevronLeft size={9} /><span>上一级</span></button>
+                        <button
+                          type="button"
+                          draggable={false}
+                          className={preferences.showDurations ? 'is-active' : ''}
+                          aria-pressed={preferences.showDurations}
+                          aria-label={preferences.showDurations ? '隐藏阶段耗时' : '显示阶段耗时'}
+                          title={preferences.showDurations ? '隐藏阶段耗时' : '显示阶段耗时'}
+                          onClick={(event) => { event.stopPropagation(); setPreferences((current) => ({ ...current, showDurations: !current.showDurations })); }}
+                        ><Clock3 size={9} /><span>耗时</span></button>
+                        <button type="button" draggable={false} aria-label="关闭局部展开" title="关闭局部展开" onClick={(event) => { event.stopPropagation(); closeLens(experiment.id); }}><X size={9} /><span>关闭</span></button>
+                      </span>
+                    )}
+                  </div>
                   <span className="label-actions">
                     <button
                       className={`baseline-toggle${isBaseline ? ' is-active' : ''}`}
@@ -1415,12 +1453,10 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                           title="使用返回或关闭按钮调整细分层级"
                         >
                           <i className="lens-cut cut-start" /><i className="lens-cut cut-end" />
-                          <b>
-                            {expanded?.scopeStack.length ? <button className="lens-back" aria-label="返回上一级" title="返回上一级" onClick={(event) => { event.stopPropagation(); stepOutOfLens(experiment.id); }}>‹</button> : null}
-                            <span>{currentScope?.label ?? '细分节点'} · {lens.pointCount}</span>
-                            {lens.factor > 1.05 ? <em>×{lens.factor.toFixed(1)}</em> : null}
-                            <button className="lens-close" aria-label="关闭局部展开" title="关闭" onClick={(event) => { event.stopPropagation(); closeLens(experiment.id); }}><X size={8} /></button>
-                          </b>
+                          <span className="lens-caption">
+                            <strong>{currentScope?.label ?? '细分节点'}</strong>
+                            <em>{lens.pointCount} 个节点{lens.factor > 1.05 ? ` · ×${lens.factor.toFixed(1)}` : ''}</em>
+                          </span>
                         </span>
                       )}
                       <RelationLayer
