@@ -588,6 +588,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [preferences, setPreferences] = useState<ViewPreferences>(DEFAULT_PREFERENCES);
   const [timelineScale, setTimelineScale] = useState(3);
   const [viewport, setViewport] = useState({ left: 0, width: 100 });
+  const [boardWidth, setBoardWidth] = useState(0);
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu | null>(null);
   const [draggedExperimentId, setDraggedExperimentId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
@@ -673,6 +674,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     if (!board) return;
     const update = () => {
       const scrollWidth = Math.max(board.clientWidth, board.scrollWidth);
+      setBoardWidth(board.clientWidth);
       setViewport({ left: (board.scrollLeft / scrollWidth) * 100, width: (board.clientWidth / scrollWidth) * 100 });
     };
     update();
@@ -714,6 +716,11 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const importedCount = Math.max(0, experiments.length - builtInExperiments.length);
   const logCount = Math.max(realLogCount, backendEvidenceCount) + importedCount;
   const contextExperiment = rowContextMenu ? experiments.find((item) => item.id === rowContextMenu.experimentId) : undefined;
+  const metricColumnWidth = 76;
+  const timelinePlotWidth = Math.max(1, boardWidth - labelWidth - metricColumnWidth);
+  const timelineRowWidth = boardWidth
+    ? labelWidth + metricColumnWidth + timelinePlotWidth * timelineScale
+    : undefined;
 
   function toggleExperiment(id: string) {
     const next = visibleIds.includes(id) ? visibleIds.filter((item) => item !== id) : [...visibleIds, id];
@@ -921,7 +928,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }
 
   return (
-    <main className="compare-app" style={{ '--run-column': `${labelWidth}px`, '--timeline-width': `${timelineScale * 100}vw` } as CSSProperties}>
+    <main className="compare-app" style={{ '--run-column': `${labelWidth}px`, '--timeline-width': timelineRowWidth ? `${timelineRowWidth}px` : '100%' } as CSSProperties}>
       <header className="compare-header">
         <div className="compare-title"><span className="mark"><span /></span><h1>模型加载对比</h1></div>
         <div className="header-count"><strong>{visibleExperiments.length}</strong> 个实验<span>{logCount} 个日志</span></div>
