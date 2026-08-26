@@ -91,12 +91,14 @@ export function ExperimentEditor({ experiment, onCancel, onSave, initialNodeId }
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.target as HTMLElement).matches('input, textarea, select')) return;
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) deleteNode(selectedId);
       if (event.key === 'Escape') {
+        event.preventDefault();
         if (linkingFrom) setLinkingFrom(null);
         else onCancel();
+        return;
       }
+      if ((event.target as HTMLElement).matches('input, textarea, select')) return;
+      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedId) deleteNode(selectedId);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);

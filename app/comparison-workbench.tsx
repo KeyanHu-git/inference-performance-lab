@@ -11,6 +11,7 @@ type TimeLens = { start: number; end: number; startX: number; endX: number; fact
 type ExpandedSegment = { linkId: string; scopeStack: string[] };
 type RowContextMenu = { experimentId: string; left: number; top: number };
 type NodeContextMenu = { experiment: RealExperiment; node: TimeNode; left: number; top: number; expandable: boolean };
+type RelationContextMenu = RelationTarget & { left: number; top: number; canExpand: boolean; expanded: boolean };
 type DropTarget = { experimentId: string; edge: 'before' | 'after' };
 type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
@@ -393,7 +394,7 @@ function RelationLayer({
   expandedLinkId,
   onLinkHover,
   onLinkClick,
-  onLinkDoubleClick,
+  onOpenMenu,
 }: {
   experiment: RealExperiment;
   selectedNodeId?: string;
@@ -406,7 +407,7 @@ function RelationLayer({
   expandedLinkId?: string;
   onLinkHover: (target?: RelationTarget) => void;
   onLinkClick: (target: RelationTarget) => void;
-  onLinkDoubleClick: (target: RelationTarget) => void;
+  onOpenMenu: (target: RelationTarget, clientX: number, clientY: number) => void;
 }) {
   const nodes = new Map(experiment.nodes.map((node) => [node.id, node]));
   return (
@@ -447,9 +448,10 @@ function RelationLayer({
                     event.stopPropagation();
                     onLinkClick(relationTarget);
                   }}
-                  onDoubleClick={(event) => {
+                  onContextMenu={(event) => {
+                    event.preventDefault();
                     event.stopPropagation();
-                    onLinkDoubleClick(relationTarget);
+                    onOpenMenu(relationTarget, event.clientX, event.clientY);
                   }}
                 />
               )}
@@ -588,11 +590,11 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [boardWidth, setBoardWidth] = useState(0);
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu | null>(null);
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu | null>(null);
+  const [relationContextMenu, setRelationContextMenu] = useState<RelationContextMenu | null>(null);
   const [draggedExperimentId, setDraggedExperimentId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const boardRef = useRef<HTMLElement>(null);
-  const relationClickTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const hydrate = window.setTimeout(() => {
@@ -643,10 +645,6 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     return () => window.clearTimeout(hydrate);
   }, [builtInExperiments]);
 
-  useEffect(() => () => {
-    if (relationClickTimer.current !== null) window.clearTimeout(relationClickTimer.current);
-  }, []);
-
   useEffect(() => {
     const collapseLens = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || !Object.keys(expandedSegments).length) return;
@@ -659,8 +657,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }, [expandedSegments]);
 
   useEffect(() => {
-    if (!rowContextMenu && !nodeContextMenu) return;
-    const close = () => { setRowContextMenu(null); setNodeContextMenu(null); };
+    if (!rowContextMenu && !nodeContextMenu && !relationContextMenu) return;
+    const close = () => { setRowContextMenu(null); setNodeContextMenu(null); setRelationContextMenu(null); };
     const closeWithEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
@@ -670,7 +668,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
       window.removeEventListener('pointerdown', close);
       window.removeEventListener('keydown', closeWithEscape);
     };
-  }, [nodeContextMenu, rowContextMenu]);
+  }, [nodeContextMenu, relationContextMenu, rowContextMenu]);
 
   useEffect(() => {
     const board = boardRef.current;
@@ -850,6 +848,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     const height = 196;
     setCurrentExperimentId(experimentId);
     setNodeContextMenu(null);
+    setRelationContextMenu(null);
     setRowContextMenu({
       experimentId,
       left: Math.max(8, Math.min(window.innerWidth - width - 8, clientX)),
@@ -863,6 +862,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     setSelected({ experiment, node });
     setCurrentExperimentId(experiment.id);
     setRowContextMenu(null);
+    setRelationContextMenu(null);
     setNodeContextMenu({
       experiment,
       node,
@@ -892,18 +892,10 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }
 
   function handleRelationClick(target: RelationTarget) {
-    if (relationClickTimer.current !== null) window.clearTimeout(relationClickTimer.current);
-    relationClickTimer.current = window.setTimeout(() => {
-      setPinnedRelation((current) => current?.experimentId === target.experimentId && current.linkId === target.linkId ? null : target);
-      relationClickTimer.current = null;
-    }, 220);
+    setPinnedRelation((current) => current?.experimentId === target.experimentId && current.linkId === target.linkId ? null : target);
   }
 
-  function handleRelationDoubleClick(target: RelationTarget) {
-    if (relationClickTimer.current !== null) {
-      window.clearTimeout(relationClickTimer.current);
-      relationClickTimer.current = null;
-    }
+  function toggleRelationExpansion(target: RelationTarget) {
     const experiment = experiments.find((item) => item.id === target.experimentId);
     const canExpand = Boolean(experiment && segmentDetailNodes(experiment, target.linkId).length);
     const isExpanded = expandedSegments[target.experimentId]?.linkId === target.linkId;
@@ -916,6 +908,25 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     });
     setPinnedRelation(isExpanded ? null : target);
     setHoveredRelation(null);
+    setRelationContextMenu(null);
+  }
+
+  function openRelationContextMenu(target: RelationTarget, clientX: number, clientY: number) {
+    const experiment = experiments.find((item) => item.id === target.experimentId);
+    if (!experiment) return;
+    const canExpand = Boolean(segmentDetailNodes(experiment, target.linkId).length);
+    const expanded = expandedSegments[target.experimentId]?.linkId === target.linkId;
+    setCurrentExperimentId(target.experimentId);
+    setPinnedRelation(target);
+    setRowContextMenu(null);
+    setNodeContextMenu(null);
+    setRelationContextMenu({
+      ...target,
+      canExpand,
+      expanded,
+      left: Math.max(8, Math.min(window.innerWidth - 238, clientX)),
+      top: Math.max(8, Math.min(window.innerHeight - 150, clientY)),
+    });
   }
 
   function drillIntoNode(experimentId: string, node: TimeNode) {
@@ -1028,11 +1039,10 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                 <section className="guide-actions">
                   <span><b>悬停连线</b> 临时突出该阶段</span>
                   <span><b>单击连线</b> 锁定或取消突出</span>
-                  <span><b>双击连线</b> 展开或恢复细分时间线</span>
+                  <span><b>右键连线</b> 展开或恢复细分时间线</span>
                   <span><b>单击节点</b> 锁定或取消同阶段高亮</span>
                   <span><b>右键节点</b> 查看说明或展开下级节点</span>
-                  <span><b>双击实验</b> 编辑标签与时间关系</span>
-                  <span><b>右键实验</b> 打开属性菜单</span>
+                  <span><b>右键实验</b> 编辑标签、备注与时间关系</span>
                 </section>
               </aside>
             )}
@@ -1155,10 +1165,9 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   tabIndex={0}
                   draggable
                   aria-pressed={currentExperimentId === experiment.id}
-                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；双击编辑；可拖动排序；右键打开属性菜单`}
-                  title="单击选择 · 双击编辑 · 拖动排序 · 右键更多操作"
+                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；可拖动排序；右键打开属性菜单`}
+                  title="单击选择 · 拖动排序 · 右键更多操作"
                   onClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); }}
-                  onDoubleClick={(event) => { event.stopPropagation(); setEditingNodeId(undefined); setEditing(experiment); setRowContextMenu(null); setNodeContextMenu(null); }}
                   onDragStart={(event) => {
                     setDraggedExperimentId(experiment.id);
                     setDropTarget(null);
@@ -1170,11 +1179,6 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
                       setCurrentExperimentId(experiment.id);
-                    }
-                    if (event.key === 'F2') {
-                      event.preventDefault();
-                      setEditingNodeId(undefined);
-                      setEditing(experiment);
                     }
                     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
                       event.preventDefault();
@@ -1221,8 +1225,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         <span
                           className="time-lens"
                           style={{ left: `${lens.startX}%`, width: `${lens.endX - lens.startX}%` }}
-                          onDoubleClick={(event) => { event.stopPropagation(); stepOutOfLens(experiment.id); }}
-                          title={expanded?.scopeStack.length ? '双击返回上一级' : '双击收起局部节点'}
+                          title="使用返回或关闭按钮调整细分层级"
                         >
                           <i className="lens-cut cut-start" /><i className="lens-cut cut-end" />
                           <b>
@@ -1245,7 +1248,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         expandedLinkId={expandedLinkId}
                         onLinkHover={(target) => setHoveredRelation(target ?? null)}
                         onLinkClick={handleRelationClick}
-                        onLinkDoubleClick={handleRelationDoubleClick}
+                        onOpenMenu={openRelationContextMenu}
                       />
                       {renderExperiment.nodes.map((node) => {
                         const hasInteractiveRelation = renderExperiment.links.some((link) => link.interactive !== false && (link.from === node.id || link.to === node.id)) || (expandedNodeIds.has(node.id) && Boolean(node.childIds?.length));
@@ -1283,7 +1286,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           onPointerDown={(event) => event.stopPropagation()}
         >
           <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
-          <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span><kbd>F2</kbd></button>
+          <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span></button>
           <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
           <button role="menuitem" disabled={contextExperiment.status !== 'complete'} onClick={() => { setBaselineId(contextExperiment.id); setRowContextMenu(null); }}><Bookmark size={12} /><span>{contextExperiment.status === 'complete' ? '设为全局基线' : '未完成，不能设为基线'}</span></button>
           <button role="menuitem" onClick={() => { setVisibleIds([contextExperiment.id]); setRowContextMenu(null); }}><Eye size={12} /><span>仅显示此实验</span></button>
@@ -1291,6 +1294,29 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           <button className="context-danger" role="menuitem" onClick={() => removeExperiment(contextExperiment.id)}><Trash2 size={12} /><span>从工作区移除</span></button>
         </aside>
       )}
+
+      {relationContextMenu && (() => {
+        const experiment = experiments.find((item) => item.id === relationContextMenu.experimentId);
+        const link = experiment?.links.find((item) => item.id === relationContextMenu.linkId);
+        const nodes = new Map(experiment?.nodes.map((node) => [node.id, node]) ?? []);
+        const source = link ? nodes.get(link.from) : undefined;
+        const target = link ? nodes.get(link.to) : undefined;
+        return (
+          <aside
+            className="node-context-menu relation-context-menu"
+            style={{ left: relationContextMenu.left, top: relationContextMenu.top }}
+            role="menu"
+            aria-label="阶段关系菜单"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <header><strong>{source?.label ?? '阶段起点'} → {target?.label ?? '阶段终点'}</strong><span>{source && target ? formatSeconds(Math.max(0, target.time - source.time)) : ''}</span></header>
+            <p>{link?.origin === 'declared' ? '日志或配置已确认该流程关系。' : '该关系由现有时间证据推定。'}</p>
+            {relationContextMenu.canExpand || relationContextMenu.expanded
+              ? <button role="menuitem" onClick={() => toggleRelationExpansion(relationContextMenu)}><ChevronDown size={12} /><span>{relationContextMenu.expanded ? '收起细分节点' : '展开细分节点'}</span></button>
+              : <p className="node-context-relation">当前阶段没有可展开的下级节点。</p>}
+          </aside>
+        );
+      })()}
 
       {nodeContextMenu && (
         <aside
