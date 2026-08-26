@@ -18,6 +18,7 @@ type WorkspaceState = {
   overrides: Record<string, RealExperiment>;
   removedIds: string[];
   orderIds?: string[];
+  baselineId?: string;
 };
 
 const WORKSPACE_KEY = 'chronoscope.workspace.v1';
@@ -564,10 +565,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [overrides, setOverrides] = useState<Record<string, RealExperiment>>({});
   const [workspaceReady, setWorkspaceReady] = useState(false);
   const [selected, setSelected] = useState<Selection | null>(null);
-  const [baselines, setBaselines] = useState<Record<string, string>>({
-    'DeepSeek-V4': 'dtfs-a',
-    'GLM-5.2 W8A8': 'glm-ram-cold',
-  });
+  const [baselineId, setBaselineId] = useState('dtfs-a');
   const [pickerOpen, setPickerOpen] = useState(false);
   const [importNote, setImportNote] = useState('');
   const [query, setQuery] = useState('');
@@ -623,8 +621,13 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           });
           setExperiments(restored);
           setOverrides(restoredOverrides);
-          setRemovedIds(stored.removedIds ?? []);
-          setVisibleIds(restored.filter((item) => !(stored.removedIds ?? []).includes(item.id)).map((item) => item.id));
+          const restoredRemovedIds = stored.removedIds ?? [];
+          const available = restored.filter((item) => !restoredRemovedIds.includes(item.id));
+          setRemovedIds(restoredRemovedIds);
+          setVisibleIds(available.map((item) => item.id));
+          setBaselineId(available.some((item) => item.id === stored.baselineId)
+            ? stored.baselineId!
+            : available.find((item) => item.status === 'complete')?.id ?? available[0]?.id ?? '');
         }
       } catch {
         setImportNote('本机修订记录无法读取，已使用原始解析结果');
@@ -690,8 +693,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   useEffect(() => {
     if (!workspaceReady) return;
     const imported = experiments.filter((item) => !builtInExperiments.some((base) => base.id === item.id));
-    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds, orderIds: experiments.map((item) => item.id) } satisfies WorkspaceState));
-  }, [builtInExperiments, experiments, overrides, removedIds, workspaceReady]);
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds, orderIds: experiments.map((item) => item.id), baselineId } satisfies WorkspaceState));
+  }, [baselineId, builtInExperiments, experiments, overrides, removedIds, workspaceReady]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -725,10 +728,10 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   function toggleExperiment(id: string) {
     const next = visibleIds.includes(id) ? visibleIds.filter((item) => item !== id) : [...visibleIds, id];
     setVisibleIds(next);
-    const target = experiments.find((item) => item.id === id);
-    if (target && baselines[target.model] === id && !next.includes(id)) {
-      const replacement = experiments.find((item) => item.model === target.model && next.includes(item.id) && item.mainWeight);
-      setBaselines((current) => ({ ...current, [target.model]: replacement?.id ?? '' }));
+    if (baselineId === id && !next.includes(id)) {
+      const replacement = experiments.find((item) => next.includes(item.id) && item.status === 'complete')
+        ?? experiments.find((item) => next.includes(item.id));
+      setBaselineId(replacement?.id ?? '');
     }
   }
 
@@ -787,13 +790,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     if (parsed.length) {
       setExperiments((current) => [...current, ...parsed]);
       setVisibleIds((current) => [...current, ...parsed.map((item) => item.id)]);
-      setBaselines((current) => {
-        const next = { ...current };
-        parsed.forEach((item) => {
-          if (!next[item.model] && item.mainWeight) next[item.model] = item.id;
-        });
-        return next;
-      });
+      if (!baselineId) setBaselineId(parsed.find((item) => item.status === 'complete')?.id ?? parsed[0].id);
       setImportNote(`已导入 ${parsed.length}/${files.length} 个日志`);
     } else if (files.length) {
       setImportNote('未识别到可定位的加载阶段');
@@ -818,6 +815,11 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
 
   function removeSelectedExperiments() {
     if (!removeSelection.length) return;
+    if (removeSelection.includes(baselineId)) {
+      const replacement = activeExperiments.find((item) => !removeSelection.includes(item.id) && item.status === 'complete')
+        ?? activeExperiments.find((item) => !removeSelection.includes(item.id));
+      setBaselineId(replacement?.id ?? '');
+    }
     setRemovedIds((current) => Array.from(new Set([...current, ...removeSelection])));
     setVisibleIds((current) => current.filter((id) => !removeSelection.includes(id)));
     setImportNote(`已从工作区移除 ${removeSelection.length} 个实验，可恢复`);
@@ -832,6 +834,11 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     setVisibleIds((current) => current.filter((item) => item !== id));
     if (currentExperimentId === id) {
       setCurrentExperimentId(activeExperiments.find((item) => item.id !== id)?.id ?? '');
+    }
+    if (baselineId === id) {
+      const replacement = activeExperiments.find((item) => item.id !== id && item.status === 'complete')
+        ?? activeExperiments.find((item) => item.id !== id);
+      setBaselineId(replacement?.id ?? '');
     }
     setRowContextMenu(null);
     setImportNote(`已移除 ${target.model} · ${target.shortName}，可在实验工作区恢复`);
@@ -1037,7 +1044,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                       <div className={`picker-item${checked ? ' checked' : ''}${removing ? ' removing' : ''}`} key={experiment.id}>
                         <button className="visibility-toggle" onClick={() => toggleExperiment(experiment.id)} aria-label={checked ? '隐藏实验' : '显示实验'}><span className="check-box">{checked && <Check size={11} />}</span></button>
                         <button className="picker-meta" onClick={() => toggleExperiment(experiment.id)}><strong>{experiment.model}</strong><small>{experiment.shortName}</small>{experiment.note && <em>{experiment.note}</em>}</button>
-                        {!manageMode && <button className={baselines[experiment.model] === experiment.id ? 'picker-icon is-active' : 'picker-icon'} onClick={() => setBaselines((current) => ({ ...current, [experiment.model]: experiment.id }))} title="设为该模型对比基线"><Bookmark size={12} /></button>}
+                        {!manageMode && <button className={baselineId === experiment.id ? 'picker-icon is-active' : 'picker-icon'} disabled={experiment.status !== 'complete'} onClick={() => setBaselineId(experiment.id)} title={experiment.status !== 'complete' ? '流程未完成，不能设为基线' : baselineId === experiment.id ? '当前全局对比基线' : '设为全局对比基线'}><Bookmark size={12} /></button>}
                         {!manageMode && <button className="picker-icon" onClick={() => { setNoteEditingId(experiment.id); setNoteDraft(experiment.note ?? ''); }} title="编辑备注"><StickyNote size={12} /></button>}
                         {manageMode && <button className="remove-check" onClick={() => setRemoveSelection((current) => current.includes(experiment.id) ? current.filter((id) => id !== experiment.id) : [...current, experiment.id])}>{removing ? <Check size={12} /> : <Trash2 size={11} />}</button>}
                         {noteEditingId === experiment.id && <div className="note-editor"><input autoFocus value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="备注会显示在左侧标签列" onKeyDown={(event) => { if (event.key === 'Enter') saveNote(experiment); if (event.key === 'Escape') setNoteEditingId(null); }} /><button onClick={() => saveNote(experiment)}>保存</button></div>}
@@ -1067,12 +1074,12 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
         <div className="experiment-list">
           {visibleExperiments.map((experiment) => {
             const width = (experiment.total / maximumTime) * 100;
-            const referenceExperiment = activeExperiments.find((item) => item.id === baselines[experiment.model])
-              ?? activeExperiments.find((item) => item.model === experiment.model && item.status === 'complete');
+            const referenceExperiment = activeExperiments.find((item) => item.id === baselineId)
+              ?? activeExperiments.find((item) => item.status === 'complete');
             const delta = experiment.status === 'complete' && referenceExperiment?.status === 'complete'
               ? ((experiment.total - referenceExperiment.total) / referenceExperiment.total) * 100
               : undefined;
-            const isBaseline = baselines[experiment.model] === experiment.id;
+            const isBaseline = baselineId === experiment.id;
             const experimentNodes = new Map(experiment.nodes.map((node) => [node.id, node]));
             const relationFocus = pinnedRelation ?? hoveredRelation;
             const focusApplies = Boolean(relationFocus && (preferences.syncStages || relationFocus.experimentId === experiment.id));
@@ -1158,7 +1165,20 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   }}
                 >
                   <div><strong>{experiment.model}</strong><span>{experiment.shortName}</span><small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>{experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}</div>
-                  <span className="label-actions">{isBaseline && <i className="base-dot" title="当前模型基线" />}</span>
+                  <span className="label-actions">
+                    <button
+                      className={`baseline-toggle${isBaseline ? ' is-active' : ''}`}
+                      type="button"
+                      draggable={false}
+                      disabled={experiment.status !== 'complete'}
+                      aria-label={experiment.status !== 'complete' ? '流程未完成，不能设为基线' : isBaseline ? '当前全局对比基线' : `将 ${experiment.model} ${experiment.shortName} 设为全局对比基线`}
+                      aria-pressed={isBaseline}
+                      title={experiment.status !== 'complete' ? '流程未完成，不能设为基线' : isBaseline ? '当前全局对比基线' : '设为全局对比基线'}
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onClick={(event) => { event.stopPropagation(); setBaselineId(experiment.id); setCurrentExperimentId(experiment.id); }}
+                      onDoubleClick={(event) => event.stopPropagation()}
+                    />
+                  </span>
                 </div>
 
                 <div className="band-column">
@@ -1245,7 +1265,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
           <button role="menuitem" onClick={() => { setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span><kbd>F2</kbd></button>
           <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
-          <button role="menuitem" onClick={() => { setBaselines((current) => ({ ...current, [contextExperiment.model]: contextExperiment.id })); setRowContextMenu(null); }}><Bookmark size={12} /><span>设为模型基线</span></button>
+          <button role="menuitem" disabled={contextExperiment.status !== 'complete'} onClick={() => { setBaselineId(contextExperiment.id); setRowContextMenu(null); }}><Bookmark size={12} /><span>{contextExperiment.status === 'complete' ? '设为全局基线' : '未完成，不能设为基线'}</span></button>
           <button role="menuitem" onClick={() => { setVisibleIds([contextExperiment.id]); setRowContextMenu(null); }}><Eye size={12} /><span>仅显示此实验</span></button>
           <i />
           <button className="context-danger" role="menuitem" onClick={() => removeExperiment(contextExperiment.id)}><Trash2 size={12} /><span>从工作区移除</span></button>
