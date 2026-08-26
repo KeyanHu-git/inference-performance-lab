@@ -1,6 +1,6 @@
 'use client';
 
-import { Bookmark, Check, ChevronDown, CircleHelp, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, CircleHelp, Eye, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
@@ -9,12 +9,15 @@ type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: n
 type RelationTarget = { experimentId: string; linkId: string; stageKey: string };
 type TimeLens = { start: number; end: number; startX: number; endX: number; factor: number; pointCount: number; displayWidth: number; positionAt: (time: number) => number };
 type ExpandedSegment = { linkId: string; scopeStack: string[] };
+type RowContextMenu = { experimentId: string; left: number; top: number };
+type DropTarget = { experimentId: string; edge: 'before' | 'after' };
 type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
 type WorkspaceState = {
   imported: RealExperiment[];
   overrides: Record<string, RealExperiment>;
   removedIds: string[];
+  orderIds?: string[];
 };
 
 const WORKSPACE_KEY = 'chronoscope.workspace.v1';
@@ -585,6 +588,9 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [preferences, setPreferences] = useState<ViewPreferences>(DEFAULT_PREFERENCES);
   const [timelineScale, setTimelineScale] = useState(3);
   const [viewport, setViewport] = useState({ left: 0, width: 100 });
+  const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu | null>(null);
+  const [draggedExperimentId, setDraggedExperimentId] = useState<string | null>(null);
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const boardRef = useRef<HTMLElement>(null);
   const relationClickTimer = useRef<number | null>(null);
@@ -605,6 +611,15 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           });
           const imported = (stored.imported ?? []).map((item) => normalizeExperiment(restoredOverrides[item.id] ?? item));
           const restored = [...builtIns, ...imported.filter((item) => !builtIns.some((base) => base.id === item.id))];
+          const order = new Map((stored.orderIds ?? []).map((id, index) => [id, index]));
+          restored.sort((left, right) => {
+            const leftOrder = order.get(left.id);
+            const rightOrder = order.get(right.id);
+            if (leftOrder === undefined && rightOrder === undefined) return 0;
+            if (leftOrder === undefined) return 1;
+            if (rightOrder === undefined) return -1;
+            return leftOrder - rightOrder;
+          });
           setExperiments(restored);
           setOverrides(restoredOverrides);
           setRemovedIds(stored.removedIds ?? []);
@@ -640,6 +655,20 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }, [expandedSegments]);
 
   useEffect(() => {
+    if (!rowContextMenu) return;
+    const close = () => setRowContextMenu(null);
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') close();
+    };
+    window.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', closeWithEscape);
+    return () => {
+      window.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', closeWithEscape);
+    };
+  }, [rowContextMenu]);
+
+  useEffect(() => {
     const board = boardRef.current;
     if (!board) return;
     const update = () => {
@@ -659,7 +688,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   useEffect(() => {
     if (!workspaceReady) return;
     const imported = experiments.filter((item) => !builtInExperiments.some((base) => base.id === item.id));
-    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds } satisfies WorkspaceState));
+    localStorage.setItem(WORKSPACE_KEY, JSON.stringify({ imported, overrides, removedIds, orderIds: experiments.map((item) => item.id) } satisfies WorkspaceState));
   }, [builtInExperiments, experiments, overrides, removedIds, workspaceReady]);
 
   useEffect(() => {
@@ -684,6 +713,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const ticks = useMemo(() => Array.from({ length: Math.floor(maximumTime / tickStep) + 1 }, (_, index) => index * tickStep), [maximumTime, tickStep]);
   const importedCount = Math.max(0, experiments.length - builtInExperiments.length);
   const logCount = Math.max(realLogCount, backendEvidenceCount) + importedCount;
+  const contextExperiment = rowContextMenu ? experiments.find((item) => item.id === rowContextMenu.experimentId) : undefined;
 
   function toggleExperiment(id: string) {
     const next = visibleIds.includes(id) ? visibleIds.filter((item) => item !== id) : [...visibleIds, id];
@@ -786,6 +816,43 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     setImportNote(`已从工作区移除 ${removeSelection.length} 个实验，可恢复`);
     setRemoveSelection([]);
     setManageMode(false);
+  }
+
+  function removeExperiment(id: string) {
+    const target = experiments.find((item) => item.id === id);
+    if (!target) return;
+    setRemovedIds((current) => Array.from(new Set([...current, id])));
+    setVisibleIds((current) => current.filter((item) => item !== id));
+    if (currentExperimentId === id) {
+      setCurrentExperimentId(activeExperiments.find((item) => item.id !== id)?.id ?? '');
+    }
+    setRowContextMenu(null);
+    setImportNote(`已移除 ${target.model} · ${target.shortName}，可在实验工作区恢复`);
+  }
+
+  function openRowContextMenu(experimentId: string, clientX: number, clientY: number) {
+    const width = 188;
+    const height = 196;
+    setCurrentExperimentId(experimentId);
+    setRowContextMenu({
+      experimentId,
+      left: Math.max(8, Math.min(window.innerWidth - width - 8, clientX)),
+      top: Math.max(8, Math.min(window.innerHeight - height - 8, clientY)),
+    });
+  }
+
+  function reorderExperiment(sourceId: string, targetId: string, edge: DropTarget['edge']) {
+    if (sourceId === targetId) return;
+    setExperiments((current) => {
+      const source = current.find((item) => item.id === sourceId);
+      if (!source) return current;
+      const rest = current.filter((item) => item.id !== sourceId);
+      const targetIndex = rest.findIndex((item) => item.id === targetId);
+      if (targetIndex < 0) return current;
+      const insertAt = targetIndex + (edge === 'after' ? 1 : 0);
+      rest.splice(insertAt, 0, source);
+      return rest;
+    });
   }
 
   function restoreRemoved() {
@@ -932,7 +999,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   <span><b>单击连线</b> 锁定或取消突出</span>
                   <span><b>双击连线</b> 展开或恢复细分时间线</span>
                   <span><b>点击节点</b> 查看时间与说明</span>
-                  <span><b>右键实验</b> 编辑时间关系</span>
+                  <span><b>双击实验</b> 编辑标签与时间关系</span>
+                  <span><b>右键实验</b> 打开属性菜单</span>
                 </section>
               </aside>
             )}
@@ -1026,23 +1094,46 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             const visibleLabels = selectVisibleLabels(renderExperiment.nodes, positionAt, laneY, timelineScale, selected?.experiment.id === experiment.id ? selected.node.id : undefined);
             return (
               <article
-                className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}${lens ? ' has-time-lens' : ''}`}
+                className={`experiment-row${isBaseline ? ' is-baseline' : ''}${currentExperimentId === experiment.id ? ' is-current' : ''}${lens ? ' has-time-lens' : ''}${draggedExperimentId === experiment.id ? ' is-dragging' : ''}${dropTarget?.experimentId === experiment.id ? ` drop-${dropTarget.edge}` : ''}`}
                 key={experiment.id}
                 onContextMenu={(event) => {
                   event.preventDefault();
-                  setCurrentExperimentId(experiment.id);
-                  setEditing(experiment);
+                  openRowContextMenu(experiment.id, event.clientX, event.clientY);
                 }}
-                title={`${experiment.name} · ${experiment.config} · 左键选择，右键编辑`}
+                onDragOver={(event) => {
+                  if (!draggedExperimentId || draggedExperimentId === experiment.id) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = 'move';
+                  const bounds = event.currentTarget.getBoundingClientRect();
+                  setDropTarget({ experimentId: experiment.id, edge: event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after' });
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  if (draggedExperimentId && dropTarget?.experimentId === experiment.id) {
+                    reorderExperiment(draggedExperimentId, experiment.id, dropTarget.edge);
+                  }
+                  setDraggedExperimentId(null);
+                  setDropTarget(null);
+                }}
+                title={`${experiment.name} · ${experiment.config}`}
               >
                 <div
                   className="experiment-name"
                   role="button"
                   tabIndex={0}
+                  draggable
                   aria-pressed={currentExperimentId === experiment.id}
-                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；右键编辑`}
-                  title="左键选择当前实验，右键编辑时间关系"
+                  aria-label={`选择 ${experiment.model} ${experiment.shortName}；双击编辑；可拖动排序；右键打开属性菜单`}
+                  title="单击选择 · 双击编辑 · 拖动排序 · 右键更多操作"
                   onClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); }}
+                  onDoubleClick={(event) => { event.stopPropagation(); setEditing(experiment); setRowContextMenu(null); }}
+                  onDragStart={(event) => {
+                    setDraggedExperimentId(experiment.id);
+                    setDropTarget(null);
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('text/plain', experiment.id);
+                  }}
+                  onDragEnd={() => { setDraggedExperimentId(null); setDropTarget(null); }}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
                       event.preventDefault();
@@ -1051,6 +1142,11 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                     if (event.key === 'F2') {
                       event.preventDefault();
                       setEditing(experiment);
+                    }
+                    if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                      event.preventDefault();
+                      const bounds = event.currentTarget.getBoundingClientRect();
+                      openRowContextMenu(experiment.id, bounds.left + 18, bounds.top + 22);
                     }
                   }}
                 >
@@ -1130,6 +1226,24 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           {!visibleExperiments.length && <div className="empty-state">从“实验”中选择需要对比的记录</div>}
         </div>
       </section>
+
+      {rowContextMenu && contextExperiment && (
+        <aside
+          className="row-context-menu"
+          style={{ left: rowContextMenu.left, top: rowContextMenu.top }}
+          role="menu"
+          aria-label={`${contextExperiment.model} ${contextExperiment.shortName} 属性菜单`}
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
+          <button role="menuitem" onClick={() => { setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span><kbd>F2</kbd></button>
+          <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
+          <button role="menuitem" onClick={() => { setBaselines((current) => ({ ...current, [contextExperiment.model]: contextExperiment.id })); setRowContextMenu(null); }}><Bookmark size={12} /><span>设为模型基线</span></button>
+          <button role="menuitem" onClick={() => { setVisibleIds([contextExperiment.id]); setRowContextMenu(null); }}><Eye size={12} /><span>仅显示此实验</span></button>
+          <i />
+          <button className="context-danger" role="menuitem" onClick={() => removeExperiment(contextExperiment.id)}><Trash2 size={12} /><span>从工作区移除</span></button>
+        </aside>
+      )}
 
       {selected && (
         <aside
