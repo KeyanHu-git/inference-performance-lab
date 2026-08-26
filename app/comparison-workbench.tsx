@@ -299,6 +299,49 @@ function segmentDetailNodes(experiment: RealExperiment, linkId: string, scopeOve
   return Array.from(new Map(direct.map((node) => [node.id, node])).values());
 }
 
+function projectSegmentDetailNodes(experiment: RealExperiment, linkId: string, scopeOverride?: string) {
+  const detailNodes = segmentDetailNodes(experiment, linkId, scopeOverride);
+  const link = experiment.links.find((item) => item.id === linkId);
+  if (!link || !detailNodes.length) return detailNodes;
+  const nodes = allExperimentNodes(experiment);
+  const source = nodes.get(link.from);
+  const target = nodes.get(link.to);
+  if (!source || !target) return detailNodes;
+  const segmentStart = Math.min(source.time, target.time);
+  const segmentEnd = Math.max(source.time, target.time);
+  const leafIds = link.detailNodeIds ?? [];
+
+  return detailNodes.map((node) => {
+    const descendantTimes = leafIds
+      .map((id) => nodes.get(id))
+      .filter((leaf): leaf is TimeNode => Boolean(leaf))
+      .filter((leaf) => {
+        let current: TimeNode | undefined = leaf;
+        const visited = new Set<string>();
+        while (current && !visited.has(current.id)) {
+          if (current.id === node.id) return true;
+          visited.add(current.id);
+          current = current.parentId ? nodes.get(current.parentId) : undefined;
+        }
+        return false;
+      })
+      .map((leaf) => leaf.time)
+      .filter((time) => time >= segmentStart && time <= segmentEnd);
+    if (!descendantTimes.length) {
+      return { ...node, time: Math.max(segmentStart, Math.min(segmentEnd, node.time)) };
+    }
+    const first = Math.min(...descendantTimes);
+    const last = Math.max(...descendantTimes);
+    return {
+      ...node,
+      time: first === last ? first : first + (last - first) / 2,
+      start: first,
+      end: last,
+      detail: `${descendantTimes.length} 个下级节点 · ${formatSeconds(first)}–${formatSeconds(last)}`,
+    };
+  });
+}
+
 function createTimeLens(experiment: RealExperiment, linkId: string | undefined, scopeId: string | undefined, width: number, maximum: number): TimeLens | null {
   if (!linkId) return null;
   const link = experiment.links.find((item) => item.id === linkId);
@@ -435,6 +478,13 @@ function RelationLayer({
           const active = interactive && (focusedStageKey ? focusedStageKey === stageKey : focusedLinkId ? focusedLinkId === link.id : selectedNodeId === link.from || selectedNodeId === link.to);
           const dimmed = interactive && Boolean(focusedStageKey || focusedLinkId || selectedNodeId) && !active;
           const path = relationPath(link, nodes, laneY, positionAt);
+          const sourceNode = nodes.get(link.from);
+          const targetNode = nodes.get(link.to);
+          const x1 = sourceNode ? positionAt(sourceNode.time) : 0;
+          const x2 = targetNode ? positionAt(targetNode.time) : 0;
+          const y1 = laneY.get(link.from) ?? MAIN_LANE_Y;
+          const y2 = laneY.get(link.to) ?? MAIN_LANE_Y;
+          const horizontal = Math.abs(y1 - y2) < .1;
           const source = nodes.get(link.from)?.label ?? link.from;
           const target = nodes.get(link.to)?.label ?? link.to;
           const relationTarget = { experimentId: experiment.id, linkId: link.id, stageKey };
@@ -447,7 +497,39 @@ function RelationLayer({
                 vectorEffect="non-scaling-stroke"
                 aria-hidden="true"
               />
-              {interactive && (
+              {interactive && (horizontal ? (
+                <rect
+                  className="relation-hit relation-hit-area"
+                  x={Math.min(x1, x2)}
+                  y={y1 - 6}
+                  width={Math.max(.8, Math.abs(x2 - x1))}
+                  height={12}
+                  rx={4}
+                  tabIndex={0}
+                  role="button"
+                  aria-pressed={pinnedLinkId === link.id}
+                  aria-expanded={expandedLinkId === link.id}
+                  aria-label={`${source} 至 ${target} 的时间关系`}
+                  onPointerEnter={() => onLinkHover(relationTarget)}
+                  onPointerLeave={() => onLinkHover()}
+                  onFocus={() => onLinkHover(relationTarget)}
+                  onBlur={() => onLinkHover()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onLinkClick(relationTarget);
+                  }}
+                  onDoubleClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (expandable) onLinkDoubleClick(relationTarget);
+                  }}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onOpenMenu(relationTarget, event.clientX, event.clientY);
+                  }}
+                />
+              ) : (
                 <path
                   className="relation-hit"
                   d={path}
@@ -476,7 +558,7 @@ function RelationLayer({
                     onOpenMenu(relationTarget, event.clientX, event.clientY);
                   }}
                 />
-              )}
+              ))}
             </g>
           );
         })}
@@ -727,6 +809,28 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
       observer.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const zoomAtPointer = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      const next = Math.max(1, Math.min(8, Number((timelineScale * Math.exp(-event.deltaY * .002)).toFixed(1))));
+      if (next === timelineScale) return;
+      const bounds = board.getBoundingClientRect();
+      const pointerX = Math.max(0, Math.min(board.clientWidth, event.clientX - bounds.left));
+      const worldAtPointer = (board.scrollLeft + pointerX) / Math.max(board.scrollWidth, 1);
+      setTimelineScale(next);
+      window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+        const current = boardRef.current;
+        if (!current) return;
+        current.scrollLeft = next === 1 ? 0 : Math.max(0, worldAtPointer * current.scrollWidth - pointerX);
+      }));
+    };
+    board.addEventListener('wheel', zoomAtPointer, { passive: false });
+    return () => board.removeEventListener('wheel', zoomAtPointer);
+  }, [timelineScale]);
 
   useEffect(() => {
     if (!workspaceReady) return;
@@ -1099,22 +1203,24 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             {helpOpen && (
               <aside className="timeline-guide" aria-label="时间轴读图说明">
                 <header>
-                  <div><strong>读图说明</strong><small>时间点与流程关系</small></div>
+                  <div><strong>时间轴图例</strong><small>节点、关系与操作</small></div>
                   <button onClick={() => setHelpOpen(false)} aria-label="关闭说明"><X size={13} /></button>
                 </header>
                 <section className="relation-guide">
-                  <div><i className="guide-line confirmed" /><span><strong>实线</strong><small>已确认的流程关系</small></span></div>
-                  <div><i className="guide-line inferred" /><span><strong>虚线</strong><small>根据日志时间回推的关系</small></span></div>
-                  <div><i className="guide-node" /><span><strong>灰点</strong><small>尚未连接到流程的时间点</small></span></div>
-                  <div><i className="guide-gap"><b /><b /></i><span><strong>无连线</strong><small>仅表示时间先后，未定义直接流程关系</small></span></div>
+                  <div><i className="guide-line confirmed" /><span><strong>实线</strong><small>日志已确认的流程关系</small></span></div>
+                  <div><i className="guide-line inferred" /><span><strong>虚线</strong><small>根据时间与语义推定的关系</small></span></div>
+                  <div><i className="guide-node" /><span><strong>灰点</strong><small>未建立直接流程关系的时间点</small></span></div>
+                  <div><i className="guide-gap"><b /><b /></i><span><strong>无连线</strong><small>仅保留时间位置</small></span></div>
                 </section>
                 <section className="guide-actions">
-                  <span><b>悬停连线</b> 临时突出该阶段</span>
-                  <span><b>单击连线</b> 锁定或取消突出</span>
-                  <span><b>右键连线</b> 展开或恢复细分时间线</span>
-                  <span><b>单击节点</b> 锁定或取消同阶段高亮</span>
-                  <span><b>右键节点</b> 查看说明或展开下级节点</span>
-                  <span><b>右键实验</b> 编辑标签、备注与时间关系</span>
+                  <span><b>悬停连线</b> 临时突出阶段</span>
+                  <span><b>单击连线</b> 锁定阶段</span>
+                  <span><b>双击连线</b> 展开或收起下一级</span>
+                  <span><b>单击节点</b> 锁定同阶段节点</span>
+                  <span><b>双击节点</b> 进入下一级节点</span>
+                  <span><b>右键节点／连线</b> 打开属性</span>
+                  <span><b>右键实验</b> 编辑标签、备注与关系</span>
+                  <span><b>Ctrl + 滚轮</b> 围绕鼠标位置缩放</span>
                 </section>
               </aside>
             )}
@@ -1195,7 +1301,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             const lens = createTimeLens(experiment, expandedLinkId, currentScopeId, width, maximumTime);
             const positionAt = lens?.positionAt ?? ((time: number) => Math.max(0, Math.min(100, (time / experiment.total) * 100)));
             const displayWidth = lens?.displayWidth ?? width;
-            const expandedNodes = expandedLinkId ? segmentDetailNodes(experiment, expandedLinkId, currentScopeId) : [];
+            const expandedNodes = expandedLinkId ? projectSegmentDetailNodes(experiment, expandedLinkId, currentScopeId) : [];
             const additionalExpandedNodes = expandedNodes.filter((node) => !experimentNodes.has(node.id));
             const expandedNodeIds = new Set(expandedNodes.map((node) => node.id));
             const expandedDetailLinks = expandedLink ? createDetailLinks(expandedLink, expandedNodes) : [];
