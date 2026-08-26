@@ -110,7 +110,6 @@ export function ExperimentEditor({ experiment, onCancel, onSave, initialNodeId }
         <header className="graph-editor-head">
           <div><small>时间关系编辑器</small><strong>{draft.model}</strong></div>
           <div className="graph-title-fields">
-            <input aria-label="模型名称" value={draft.model} onChange={(event) => setDraft({ ...draft, model: event.target.value })} />
             <input aria-label="实验标签" value={draft.shortName} onChange={(event) => setDraft({ ...draft, shortName: event.target.value })} />
             <input aria-label="实验备注" placeholder="添加实验备注" value={draft.note ?? ''} onChange={(event) => setDraft({ ...draft, note: event.target.value })} />
           </div>

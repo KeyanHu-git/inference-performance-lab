@@ -589,7 +589,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [viewport, setViewport] = useState({ left: 0, width: 100 });
   const [boardWidth, setBoardWidth] = useState(0);
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu | null>(null);
-  const [identityDraft, setIdentityDraft] = useState<{ experimentId: string; model: string; shortName: string } | null>(null);
+  const [identityDraft, setIdentityDraft] = useState<{ experimentId: string; field: 'model' | 'shortName'; value: string } | null>(null);
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu | null>(null);
   const [relationContextMenu, setRelationContextMenu] = useState<RelationContextMenu | null>(null);
   const [draggedExperimentId, setDraggedExperimentId] = useState<string | null>(null);
@@ -833,19 +833,20 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     setPickerOpen(true);
   }
 
-  function startIdentityEdit(experiment: RealExperiment) {
-    setIdentityDraft({ experimentId: experiment.id, model: experiment.model, shortName: experiment.shortName });
+  function startIdentityEdit(experiment: RealExperiment, field: 'model' | 'shortName') {
+    setIdentityDraft({ experimentId: experiment.id, field, value: experiment[field] });
   }
 
   function saveIdentityEdit() {
     if (!identityDraft) return;
     const experiment = experiments.find((item) => item.id === identityDraft.experimentId);
-    const model = identityDraft.model.trim();
-    const shortName = identityDraft.shortName.trim();
-    if (!experiment || !model || !shortName) return;
-    saveExperiment({ ...experiment, model, shortName });
+    const value = identityDraft.value.trim();
+    if (!experiment || !value) {
+      setIdentityDraft(null);
+      return;
+    }
+    saveExperiment({ ...experiment, [identityDraft.field]: value });
     setIdentityDraft(null);
-    setRowContextMenu(null);
   }
 
   function removeSelectedExperiments() {
@@ -1322,21 +1323,14 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           aria-label={`${contextExperiment.model} ${contextExperiment.shortName} 属性菜单`}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          {identityDraft?.experimentId === contextExperiment.id ? (
-            <div className="row-identity-editor" onKeyDown={(event) => {
-              if (event.key === 'Enter') { event.preventDefault(); saveIdentityEdit(); }
-              if (event.key === 'Escape') { event.preventDefault(); setIdentityDraft(null); }
-            }}>
-              <label><span>模型</span><input autoFocus aria-label="模型名称" value={identityDraft.model} onChange={(event) => setIdentityDraft({ ...identityDraft, model: event.target.value })} /></label>
-              <label><span>操作</span><input aria-label="实验操作" value={identityDraft.shortName} onChange={(event) => setIdentityDraft({ ...identityDraft, shortName: event.target.value })} /></label>
-              <div><button type="button" onClick={() => setIdentityDraft(null)}>取消</button><button type="button" className="identity-save" disabled={!identityDraft.model.trim() || !identityDraft.shortName.trim()} onClick={saveIdentityEdit}>保存</button></div>
-            </div>
-          ) : (
-            <>
-              <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
-              <button role="menuitem" onClick={() => startIdentityEdit(contextExperiment)}><Pencil size={12} /><span>编辑名称</span></button>
-            </>
-          )}
+          <header className="row-identity-header">
+            {identityDraft?.experimentId === contextExperiment.id && identityDraft.field === 'model'
+              ? <input autoFocus aria-label="模型名称" value={identityDraft.value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setIdentityDraft({ ...identityDraft, value: event.target.value })} onBlur={saveIdentityEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setIdentityDraft(null); } }} />
+              : <button type="button" className="identity-inline-text identity-model" title="双击编辑模型名称" aria-label={`编辑模型名称 ${contextExperiment.model}`} onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(contextExperiment, 'model'); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') startIdentityEdit(contextExperiment, 'model'); }}>{contextExperiment.model}</button>}
+            {identityDraft?.experimentId === contextExperiment.id && identityDraft.field === 'shortName'
+              ? <input autoFocus aria-label="实验操作" value={identityDraft.value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setIdentityDraft({ ...identityDraft, value: event.target.value })} onBlur={saveIdentityEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setIdentityDraft(null); } }} />
+              : <button type="button" className="identity-inline-text identity-operation" title="双击编辑实验操作" aria-label={`编辑实验操作 ${contextExperiment.shortName}`} onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(contextExperiment, 'shortName'); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') startIdentityEdit(contextExperiment, 'shortName'); }}>{contextExperiment.shortName}</button>}
+          </header>
           <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑流程</span></button>
           <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
           <button role="menuitem" disabled={contextExperiment.status !== 'complete'} onClick={() => { setBaselineId(contextExperiment.id); setRowContextMenu(null); }}><Bookmark size={12} /><span>{contextExperiment.status === 'complete' ? '设为全局基线' : '未完成，不能设为基线'}</span></button>
