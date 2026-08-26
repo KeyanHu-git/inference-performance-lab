@@ -6,13 +6,14 @@ import { formatSeconds, normalizeExperiment, RealExperiment, TimeLink, TimeNode 
 
 const laneY = (node: TimeNode) => node.lane === 0 ? 24 : node.lane === 1 ? 76 : 50;
 
-export function ExperimentEditor({ experiment, onCancel, onSave }: {
+export function ExperimentEditor({ experiment, onCancel, onSave, initialNodeId }: {
   experiment: RealExperiment;
   onCancel: () => void;
   onSave: (experiment: RealExperiment) => void;
+  initialNodeId?: string;
 }) {
   const [draft, setDraft] = useState(experiment);
-  const [selectedId, setSelectedId] = useState(experiment.nodes[0]?.id ?? '');
+  const [selectedId, setSelectedId] = useState(initialNodeId && experiment.nodes.some((node) => node.id === initialNodeId) ? initialNodeId : experiment.nodes[0]?.id ?? '');
   const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
   const stage = useRef<HTMLDivElement>(null);
   const selected = draft.nodes.find((node) => node.id === selectedId);

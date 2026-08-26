@@ -5,11 +5,12 @@ import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffec
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
-type Selection = { experiment: RealExperiment; node: TimeNode; anchor: { left: number; top: number; above: boolean } };
+type Selection = { experiment: RealExperiment; node: TimeNode };
 type RelationTarget = { experimentId: string; linkId: string; stageKey: string };
 type TimeLens = { start: number; end: number; startX: number; endX: number; factor: number; pointCount: number; displayWidth: number; positionAt: (time: number) => number };
 type ExpandedSegment = { linkId: string; scopeStack: string[] };
 type RowContextMenu = { experimentId: string; left: number; top: number };
+type NodeContextMenu = { experiment: RealExperiment; node: TimeNode; left: number; top: number; expandable: boolean };
 type DropTarget = { experimentId: string; edge: 'before' | 'after' };
 type ViewPreferences = { syncStages: boolean; showDurations: boolean };
 type ParsedLine = { line: string; index: number; time?: number };
@@ -484,8 +485,8 @@ function NodeMarker({
   relationState,
   showLabel,
   expandable,
-  onSelect,
-  onDrill,
+  onToggle,
+  onOpenMenu,
 }: {
   node: TimeNode;
   position: number;
@@ -495,8 +496,8 @@ function NodeMarker({
   relationState: 'idle' | 'endpoint' | 'dimmed' | 'unlinked';
   showLabel: boolean;
   expandable: boolean;
-  onSelect: (node: TimeNode, anchor: Selection['anchor']) => void;
-  onDrill: (node: TimeNode) => void;
+  onToggle: (node: TimeNode) => void;
+  onOpenMenu: (node: TimeNode, clientX: number, clientY: number) => void;
 }) {
   const edgeClass = position <= 1 ? 'edge-start' : position >= 88 ? 'edge-end' : '';
   return (
@@ -505,19 +506,16 @@ function NodeMarker({
       style={{ left: `${position}%`, '--node-y': `${y}px` } as CSSProperties}
       onClick={(event) => {
         event.stopPropagation();
-        const rect = event.currentTarget.getBoundingClientRect();
-        const tooltipWidth = 248;
-        const left = Math.max(8, Math.min(window.innerWidth - tooltipWidth - 8, rect.left + rect.width / 2 - tooltipWidth / 2));
-        const above = rect.top > 150;
-        onSelect(node, { left, top: above ? rect.top - 7 : rect.bottom + 7, above });
+        onToggle(node);
       }}
-      onDoubleClick={(event) => {
-        if (!expandable) return;
+      onContextMenu={(event) => {
+        event.preventDefault();
         event.stopPropagation();
-        onDrill(node);
+        onOpenMenu(node, event.clientX, event.clientY);
       }}
       aria-label={`${node.label}，${formatSeconds(node.time)}，${node.detail}`}
-      title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail}${expandable ? ' · 双击展开下级节点' : ''}`}
+      aria-pressed={selected}
+      title={`${node.label} · ${formatSeconds(node.time)} · ${node.detail} · 右键打开节点菜单`}
     >
       <span>{node.label}</span>
     </button>
@@ -576,6 +574,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [noteEditingId, setNoteEditingId] = useState<string | null>(null);
   const [noteDraft, setNoteDraft] = useState('');
   const [editing, setEditing] = useState<RealExperiment | null>(null);
+  const [editingNodeId, setEditingNodeId] = useState<string | undefined>();
   const [currentExperimentId, setCurrentExperimentId] = useState(builtInExperiments[0]?.id ?? '');
   const [labelWidth, setLabelWidth] = useState(162);
   const [hoveredRelation, setHoveredRelation] = useState<RelationTarget | null>(null);
@@ -588,6 +587,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [viewport, setViewport] = useState({ left: 0, width: 100 });
   const [boardWidth, setBoardWidth] = useState(0);
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu | null>(null);
+  const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu | null>(null);
   const [draggedExperimentId, setDraggedExperimentId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<DropTarget | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
@@ -659,8 +659,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   }, [expandedSegments]);
 
   useEffect(() => {
-    if (!rowContextMenu) return;
-    const close = () => setRowContextMenu(null);
+    if (!rowContextMenu && !nodeContextMenu) return;
+    const close = () => { setRowContextMenu(null); setNodeContextMenu(null); };
     const closeWithEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
@@ -670,7 +670,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
       window.removeEventListener('pointerdown', close);
       window.removeEventListener('keydown', closeWithEscape);
     };
-  }, [rowContextMenu]);
+  }, [nodeContextMenu, rowContextMenu]);
 
   useEffect(() => {
     const board = boardRef.current;
@@ -803,6 +803,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     setExperiments((current) => current.map((item) => item.id === normalized.id ? normalized : item));
     setOverrides((current) => ({ ...current, [normalized.id]: normalized }));
     setEditing(null);
+    setEditingNodeId(undefined);
     setSelected(null);
     setImportNote(`已保存 ${normalized.model} · ${normalized.shortName}`);
   }
@@ -848,8 +849,24 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     const width = 188;
     const height = 196;
     setCurrentExperimentId(experimentId);
+    setNodeContextMenu(null);
     setRowContextMenu({
       experimentId,
+      left: Math.max(8, Math.min(window.innerWidth - width - 8, clientX)),
+      top: Math.max(8, Math.min(window.innerHeight - height - 8, clientY)),
+    });
+  }
+
+  function openNodeContextMenu(experiment: RealExperiment, node: TimeNode, clientX: number, clientY: number, expandable: boolean) {
+    const width = 238;
+    const height = expandable ? 184 : 154;
+    setSelected({ experiment, node });
+    setCurrentExperimentId(experiment.id);
+    setRowContextMenu(null);
+    setNodeContextMenu({
+      experiment,
+      node,
+      expandable,
       left: Math.max(8, Math.min(window.innerWidth - width - 8, clientX)),
       top: Math.max(8, Math.min(window.innerHeight - height - 8, clientY)),
     });
@@ -1012,7 +1029,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   <span><b>悬停连线</b> 临时突出该阶段</span>
                   <span><b>单击连线</b> 锁定或取消突出</span>
                   <span><b>双击连线</b> 展开或恢复细分时间线</span>
-                  <span><b>点击节点</b> 查看时间与说明</span>
+                  <span><b>单击节点</b> 锁定或取消同阶段高亮</span>
+                  <span><b>右键节点</b> 查看说明或展开下级节点</span>
                   <span><b>双击实验</b> 编辑标签与时间关系</span>
                   <span><b>右键实验</b> 打开属性菜单</span>
                 </section>
@@ -1140,7 +1158,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   aria-label={`选择 ${experiment.model} ${experiment.shortName}；双击编辑；可拖动排序；右键打开属性菜单`}
                   title="单击选择 · 双击编辑 · 拖动排序 · 右键更多操作"
                   onClick={(event) => { event.stopPropagation(); setCurrentExperimentId(experiment.id); }}
-                  onDoubleClick={(event) => { event.stopPropagation(); setEditing(experiment); setRowContextMenu(null); }}
+                  onDoubleClick={(event) => { event.stopPropagation(); setEditingNodeId(undefined); setEditing(experiment); setRowContextMenu(null); setNodeContextMenu(null); }}
                   onDragStart={(event) => {
                     setDraggedExperimentId(experiment.id);
                     setDropTarget(null);
@@ -1155,6 +1173,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                     }
                     if (event.key === 'F2') {
                       event.preventDefault();
+                      setEditingNodeId(undefined);
                       setEditing(experiment);
                     }
                     if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
@@ -1235,7 +1254,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                           : focusedLinks.length
                             ? focusedLinks.some((link) => link.from === node.id || link.to === node.id) ? 'endpoint' : 'dimmed'
                             : 'idle';
-                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} showLabel={visibleLabels.has(node.id)} expandable={expandedNodeIds.has(node.id) && Boolean(node.childIds?.length)} onSelect={(value, anchor) => setSelected({ experiment: renderExperiment, node: value, anchor })} onDrill={(value) => drillIntoNode(experiment.id, value)} />;
+                        const expandable = expandedNodeIds.has(node.id) && Boolean(node.childIds?.length);
+                        return <NodeMarker key={node.id} node={node} position={positionAt(node.time)} y={laneY.get(node.id) ?? MAIN_LANE_Y} selected={selected?.experiment.id === experiment.id && selected.node.id === node.id} stagePeer={Boolean(selected && (preferences.syncStages || selected.experiment.id === experiment.id) && nodeStageKey(selected.node) === nodeStageKey(node))} relationState={relationState} showLabel={visibleLabels.has(node.id)} expandable={expandable} onToggle={(value) => setSelected((current) => current?.experiment.id === experiment.id && current.node.id === value.id ? null : { experiment: renderExperiment, node: value })} onOpenMenu={(value, clientX, clientY) => openNodeContextMenu(experiment, value, clientX, clientY, expandable)} />;
                       })}
                     </div>
                   </div>
@@ -1263,7 +1283,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           onPointerDown={(event) => event.stopPropagation()}
         >
           <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
-          <button role="menuitem" onClick={() => { setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span><kbd>F2</kbd></button>
+          <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span><kbd>F2</kbd></button>
           <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
           <button role="menuitem" disabled={contextExperiment.status !== 'complete'} onClick={() => { setBaselineId(contextExperiment.id); setRowContextMenu(null); }}><Bookmark size={12} /><span>{contextExperiment.status === 'complete' ? '设为全局基线' : '未完成，不能设为基线'}</span></button>
           <button role="menuitem" onClick={() => { setVisibleIds([contextExperiment.id]); setRowContextMenu(null); }}><Eye size={12} /><span>仅显示此实验</span></button>
@@ -1272,19 +1292,23 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
         </aside>
       )}
 
-      {selected && (
+      {nodeContextMenu && (
         <aside
-          className={`node-popover ${selected.anchor.above ? 'popover-above' : 'popover-below'}`}
-          style={{ left: selected.anchor.left, top: selected.anchor.top, transform: selected.anchor.above ? 'translateY(-100%)' : undefined }}
+          className="node-context-menu"
+          style={{ left: nodeContextMenu.left, top: nodeContextMenu.top }}
+          role="menu"
+          aria-label={`${nodeContextMenu.node.label} 节点菜单`}
+          onPointerDown={(event) => event.stopPropagation()}
         >
-          <button className="popover-close" onClick={() => setSelected(null)} aria-label="关闭"><X size={13} /></button>
-          <strong>{selected.node.label}<span>T+{formatSeconds(selected.node.time)}</span></strong>
-          <p>{describeNode(selected.node)}</p>
-          <p className="popover-relation">{describeRelations(selected.experiment, selected.node)}</p>
+          <header><strong>{nodeContextMenu.node.label}</strong><span>T+{formatSeconds(nodeContextMenu.node.time)}</span></header>
+          <p>{describeNode(nodeContextMenu.node)}</p>
+          <p className="node-context-relation">{describeRelations(nodeContextMenu.experiment, nodeContextMenu.node)}</p>
+          {nodeContextMenu.expandable && <button role="menuitem" onClick={() => { drillIntoNode(nodeContextMenu.experiment.id, nodeContextMenu.node); setNodeContextMenu(null); }}><ChevronDown size={12} /><span>展开下级节点</span></button>}
+          {nodeContextMenu.experiment.nodes.some((node) => node.id === nodeContextMenu.node.id) && <button role="menuitem" onClick={() => { setEditingNodeId(nodeContextMenu.node.id); setEditing(nodeContextMenu.experiment); setNodeContextMenu(null); }}><Pencil size={12} /><span>编辑此节点</span></button>}
         </aside>
       )}
 
-      {editing && <ExperimentEditor experiment={editing} onCancel={() => setEditing(null)} onSave={saveExperiment} />}
+      {editing && <ExperimentEditor experiment={editing} initialNodeId={editingNodeId} onCancel={() => { setEditing(null); setEditingNodeId(undefined); }} onSave={saveExperiment} />}
 
       <footer className="compare-footer">
           <span>数据快照 <code>KeyanHu-workspace</code></span>
