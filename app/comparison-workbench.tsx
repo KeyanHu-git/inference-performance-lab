@@ -6,7 +6,7 @@ import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
 
 type Selection = { experiment: RealExperiment; node: TimeNode };
-type RelationTarget = { experimentId: string; linkId: string; stageKey: string };
+type RelationTarget = { experimentId: string; linkId: string; stageKey: string; sourceLabel: string; targetLabel: string; duration: number; origin: TimeLink['origin'] };
 type TimeLens = { start: number; end: number; startX: number; endX: number; factor: number; pointCount: number; displayWidth: number; positionAt: (time: number) => number };
 type ExpandedSegment = { linkId: string; scopeStack: string[] };
 type RowContextMenu = { experimentId: string; left: number; top: number };
@@ -392,7 +392,7 @@ function createDetailLinks(link: TimeLink, detailNodes: TimeNode[]): TimeLink[] 
       to: node.id,
       kind: multiple ? 'branch' as const : 'sequence' as const,
       origin: link.origin,
-      interactive: false,
+      interactive: true,
     },
     {
       id: `${link.id}:detail:${node.id}:out`,
@@ -400,7 +400,7 @@ function createDetailLinks(link: TimeLink, detailNodes: TimeNode[]): TimeLink[] 
       to: link.to,
       kind: multiple ? 'join' as const : 'sequence' as const,
       origin: link.origin,
-      interactive: false,
+      interactive: true,
     },
   ]));
 }
@@ -487,7 +487,15 @@ function RelationLayer({
           const horizontal = Math.abs(y1 - y2) < .1;
           const source = nodes.get(link.from)?.label ?? link.from;
           const target = nodes.get(link.to)?.label ?? link.to;
-          const relationTarget = { experimentId: experiment.id, linkId: link.id, stageKey };
+          const relationTarget = {
+            experimentId: experiment.id,
+            linkId: link.id,
+            stageKey,
+            sourceLabel: source,
+            targetLabel: target,
+            duration: Math.max(0, (targetNode?.time ?? 0) - (sourceNode?.time ?? 0)),
+            origin: link.origin,
+          };
           const expandable = Boolean(link.detailNodeIds?.length);
           return (
             <g key={link.id}>
@@ -1287,11 +1295,6 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
               : undefined;
             const isBaseline = baselineId === experiment.id;
             const experimentNodes = new Map(experiment.nodes.map((node) => [node.id, node]));
-            const relationFocus = pinnedRelation ?? hoveredRelation;
-            const focusApplies = Boolean(relationFocus && (preferences.syncStages || relationFocus.experimentId === experiment.id));
-            const focusedLinks = focusApplies && relationFocus
-              ? experiment.links.filter((link) => preferences.syncStages ? linkStageKey(link, experimentNodes) === relationFocus.stageKey : link.id === relationFocus.linkId)
-              : [];
             const expanded = expandedSegments[experiment.id];
             const expandedLinkId = expanded?.linkId;
             const expandedLink = expandedLinkId ? experiment.links.find((link) => link.id === expandedLinkId) : undefined;
@@ -1310,6 +1313,12 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
               nodes: [...experiment.nodes, ...additionalExpandedNodes],
               links: [...experiment.links.filter((link) => link.id !== expandedLinkId), ...expandedDetailLinks],
             } : experiment;
+            const renderNodes = new Map(renderExperiment.nodes.map((node) => [node.id, node]));
+            const relationFocus = pinnedRelation ?? hoveredRelation;
+            const focusApplies = Boolean(relationFocus && (preferences.syncStages || relationFocus.experimentId === experiment.id));
+            const focusedLinks = focusApplies && relationFocus
+              ? renderExperiment.links.filter((link) => preferences.syncStages ? linkStageKey(link, renderNodes) === relationFocus.stageKey : link.id === relationFocus.linkId)
+              : [];
             const laneY = createLaneLayout(renderExperiment);
             const visibleLabels = selectVisibleLabels(renderExperiment.nodes, positionAt, laneY, timelineScale, selected?.experiment.id === experiment.id ? selected.node.id : undefined);
             return (
@@ -1495,8 +1504,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             aria-label="阶段关系菜单"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <header><strong>{source?.label ?? '阶段起点'} → {target?.label ?? '阶段终点'}</strong><span>{source && target ? formatSeconds(Math.max(0, target.time - source.time)) : ''}</span></header>
-            <p>{link?.origin === 'declared' ? '日志或配置已确认该流程关系。' : '该关系由现有时间证据推定。'}</p>
+            <header><strong>{source?.label ?? relationContextMenu.sourceLabel} → {target?.label ?? relationContextMenu.targetLabel}</strong><span>{formatSeconds(source && target ? Math.max(0, target.time - source.time) : relationContextMenu.duration)}</span></header>
+            <p>{(link?.origin ?? relationContextMenu.origin) === 'declared' ? '日志或配置已确认该流程关系。' : '该关系由现有时间证据推定。'}</p>
             {relationContextMenu.canExpand || relationContextMenu.expanded
               ? <button role="menuitem" onClick={() => toggleRelationExpansion(relationContextMenu)}><ChevronDown size={12} /><span>{relationContextMenu.expanded ? '收起细分节点' : '展开细分节点'}</span></button>
               : <p className="node-context-relation">当前阶段没有可展开的下级节点。</p>}
