@@ -147,18 +147,25 @@ function compileLegacyRun(experiment, sources) {
     boundary: 'observed', importance: 'raw', detail: `EP${item.ep} 开始读取主权重`, evidence: evidenceRef(item),
   }));
 
-  const progress = unique(sources.flatMap((source) => source.lines.flatMap((line) => {
-    const match = line.text.match(/Loading safetensors checkpoint shards:\s*(\d+)% Completed \|\s*(\d+)\/(\d+)\s*\[(\d+):(\d+)/i);
-    if (!match || !weightStarts.length) return [];
-    const elapsed = Number(match[4]) * 60 + Number(match[5]);
+  const progressCandidates = sources.flatMap((source) => source.lines.flatMap((line) => {
+    if (!weightStarts.length) return [];
     const start = Math.min(...weightStarts.map((item) => item.time));
-    return [{ source, line, time: start + elapsed, percent: Number(match[1]), done: Number(match[2]), total: Number(match[3]) }];
-  })), (item) => `${item.done}:${item.time}`);
+    return [...line.text.matchAll(/Loading safetensors checkpoint shards:\s*(\d+)% Completed \|\s*(\d+)\/(\d+)\s*\[(\d+):(\d+)/gi)].map((match) => {
+      const elapsed = Number(match[4]) * 60 + Number(match[5]);
+      return { source, line, time: start + elapsed, elapsed, percent: Number(match[1]), done: Number(match[2]), total: Number(match[3]) };
+    });
+  }));
+  const progressByShard = new Map();
+  for (const item of progressCandidates) {
+    const previous = progressByShard.get(item.done);
+    if (!previous || item.elapsed > previous.elapsed) progressByShard.set(item.done, item);
+  }
+  const progress = [...progressByShard.values()].sort((left, right) => left.done - right.done);
   progress.forEach((item, index) => detailNodes.push({
     id: `weight-progress-${index}`, parentId: `phase-progress-band${Math.min(3, Math.floor(item.percent / 25))}`, semanticKey: 'weights.progress.shard',
     subjectRef: `shard:${item.done}`, label: `${item.done}/${item.total}`, kind: 'event', start: at(item.time),
     boundary: 'derived', importance: item.done % 10 === 0 || item.done === item.total ? 'diagnostic' : 'raw',
-    detail: `主权重读取 ${item.percent}%`, evidence: evidenceRef(item),
+    detail: `主权重读取 ${item.percent}%（可见分支最晚进度）`, evidence: evidenceRef(item),
   }));
 
   const weightDone = unique(sources.flatMap((source) => source.lines.flatMap((line) => {
