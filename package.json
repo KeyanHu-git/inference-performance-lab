@@ -7,7 +7,8 @@
   },
   "scripts": {
     "dev": "vinext dev",
-    "data:compile": "node scripts/compile-glm52.mjs",
+    "data:compile:glm": "node scripts/compile-glm52.mjs",
+    "data:compile": "node --experimental-strip-types scripts/compile-all-timelines.mjs",
     "timeline": "node scripts/timeline-cli.mjs",
     "build": "vinext build",
     "start": "vinext start",
