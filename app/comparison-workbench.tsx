@@ -589,6 +589,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   const [viewport, setViewport] = useState({ left: 0, width: 100 });
   const [boardWidth, setBoardWidth] = useState(0);
   const [rowContextMenu, setRowContextMenu] = useState<RowContextMenu | null>(null);
+  const [identityDraft, setIdentityDraft] = useState<{ experimentId: string; model: string; shortName: string } | null>(null);
   const [nodeContextMenu, setNodeContextMenu] = useState<NodeContextMenu | null>(null);
   const [relationContextMenu, setRelationContextMenu] = useState<RelationContextMenu | null>(null);
   const [draggedExperimentId, setDraggedExperimentId] = useState<string | null>(null);
@@ -606,7 +607,12 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
             const override = restoredOverrides[item.id];
             if (!override) return normalizeExperiment(item);
             if (item.source.startsWith('SemanticTimeline') && !override.source.startsWith('SemanticTimeline')) {
-              return normalizeExperiment({ ...item, shortName: override.shortName || item.shortName, note: override.note });
+              return normalizeExperiment({
+                ...item,
+                model: override.model || item.model,
+                shortName: override.shortName || item.shortName,
+                note: override.note,
+              });
             }
             return normalizeExperiment(override);
           });
@@ -658,7 +664,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
 
   useEffect(() => {
     if (!rowContextMenu && !nodeContextMenu && !relationContextMenu) return;
-    const close = () => { setRowContextMenu(null); setNodeContextMenu(null); setRelationContextMenu(null); };
+    const close = () => { setRowContextMenu(null); setNodeContextMenu(null); setRelationContextMenu(null); setIdentityDraft(null); };
     const closeWithEscape = (event: KeyboardEvent) => {
       if (event.key === 'Escape') close();
     };
@@ -799,7 +805,22 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   function saveExperiment(next: RealExperiment) {
     const normalized = normalizeExperiment(next);
     setExperiments((current) => current.map((item) => item.id === normalized.id ? normalized : item));
-    setOverrides((current) => ({ ...current, [normalized.id]: normalized }));
+    setOverrides((current) => {
+      const nextOverrides = { ...current, [normalized.id]: normalized };
+      try {
+        const stored = JSON.parse(localStorage.getItem(WORKSPACE_KEY) ?? 'null') as WorkspaceState | null;
+        localStorage.setItem(WORKSPACE_KEY, JSON.stringify({
+          imported: stored?.imported ?? [],
+          overrides: { ...(stored?.overrides ?? {}), ...nextOverrides },
+          removedIds: stored?.removedIds ?? removedIds,
+          orderIds: stored?.orderIds ?? experiments.map((item) => item.id),
+          baselineId: stored?.baselineId ?? baselineId,
+        } satisfies WorkspaceState));
+      } catch {
+        setImportNote('名称已更新，但本机持久化失败');
+      }
+      return nextOverrides;
+    });
     setEditing(null);
     setEditingNodeId(undefined);
     setSelected(null);
@@ -810,6 +831,21 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     saveExperiment({ ...experiment, note: noteDraft.trim() });
     setNoteEditingId(null);
     setPickerOpen(true);
+  }
+
+  function startIdentityEdit(experiment: RealExperiment) {
+    setIdentityDraft({ experimentId: experiment.id, model: experiment.model, shortName: experiment.shortName });
+  }
+
+  function saveIdentityEdit() {
+    if (!identityDraft) return;
+    const experiment = experiments.find((item) => item.id === identityDraft.experimentId);
+    const model = identityDraft.model.trim();
+    const shortName = identityDraft.shortName.trim();
+    if (!experiment || !model || !shortName) return;
+    saveExperiment({ ...experiment, model, shortName });
+    setIdentityDraft(null);
+    setRowContextMenu(null);
   }
 
   function removeSelectedExperiments() {
@@ -849,6 +885,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
     setCurrentExperimentId(experimentId);
     setNodeContextMenu(null);
     setRelationContextMenu(null);
+    setIdentityDraft(null);
     setRowContextMenu({
       experimentId,
       left: Math.max(8, Math.min(window.innerWidth - width - 8, clientX)),
@@ -1285,8 +1322,22 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           aria-label={`${contextExperiment.model} ${contextExperiment.shortName} 属性菜单`}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
-          <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑实验</span></button>
+          {identityDraft?.experimentId === contextExperiment.id ? (
+            <div className="row-identity-editor" onKeyDown={(event) => {
+              if (event.key === 'Enter') { event.preventDefault(); saveIdentityEdit(); }
+              if (event.key === 'Escape') { event.preventDefault(); setIdentityDraft(null); }
+            }}>
+              <label><span>模型</span><input autoFocus aria-label="模型名称" value={identityDraft.model} onChange={(event) => setIdentityDraft({ ...identityDraft, model: event.target.value })} /></label>
+              <label><span>操作</span><input aria-label="实验操作" value={identityDraft.shortName} onChange={(event) => setIdentityDraft({ ...identityDraft, shortName: event.target.value })} /></label>
+              <div><button type="button" onClick={() => setIdentityDraft(null)}>取消</button><button type="button" className="identity-save" disabled={!identityDraft.model.trim() || !identityDraft.shortName.trim()} onClick={saveIdentityEdit}>保存</button></div>
+            </div>
+          ) : (
+            <>
+              <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
+              <button role="menuitem" onClick={() => startIdentityEdit(contextExperiment)}><Pencil size={12} /><span>编辑名称</span></button>
+            </>
+          )}
+          <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑流程</span></button>
           <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
           <button role="menuitem" disabled={contextExperiment.status !== 'complete'} onClick={() => { setBaselineId(contextExperiment.id); setRowContextMenu(null); }}><Bookmark size={12} /><span>{contextExperiment.status === 'complete' ? '设为全局基线' : '未完成，不能设为基线'}</span></button>
           <button role="menuitem" onClick={() => { setVisibleIds([contextExperiment.id]); setRowContextMenu(null); }}><Eye size={12} /><span>仅显示此实验</span></button>
