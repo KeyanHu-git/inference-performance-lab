@@ -675,6 +675,12 @@ function describeRelations(experiment: RealExperiment, node: TimeNode) {
   return `关系：${parts.join('；')}`;
 }
 
+function noteRepeatsIdentity(experiment: RealExperiment) {
+  const note = experiment.note?.trim().toLocaleLowerCase();
+  if (!note) return false;
+  return `${experiment.model} ${experiment.shortName}`.toLocaleLowerCase().includes(note);
+}
+
 export default function ComparisonWorkbench({ backendExperiments = [], backendEvidenceCount = 0 }: { backendExperiments?: RealExperiment[]; backendEvidenceCount?: number }) {
   const builtInExperiments = useMemo(() => {
     const backend = new Map(backendExperiments.map((item) => [item.id, item]));
@@ -1387,9 +1393,30 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                 >
                   <div>
                     <strong>{experiment.model}</strong>
-                    <span>{experiment.shortName}</span>
+                    {identityDraft?.experimentId === experiment.id && identityDraft.field === 'shortName'
+                      ? <input
+                          className="row-identity-input"
+                          autoFocus
+                          aria-label="实验操作"
+                          value={identityDraft.value}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onChange={(event) => setIdentityDraft({ ...identityDraft, value: event.target.value })}
+                          onBlur={saveIdentityEdit}
+                          onKeyDown={(event) => {
+                            event.stopPropagation();
+                            if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                            if (event.key === 'Escape') { event.preventDefault(); setIdentityDraft(null); }
+                          }}
+                        />
+                      : <span
+                          className="row-short-name"
+                          title="双击修改实验操作"
+                          onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(experiment, 'shortName'); }}
+                        >{experiment.shortName}</span>}
                     <small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>
-                    {!lens && experiment.note && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}
+                    {!lens && experiment.note && !noteRepeatsIdentity(experiment) && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}
                     {lens && (
                       <span className="row-lens-controls" role="group" aria-label={`${currentScope?.label ?? '细分节点'}层级控制`} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
                         <button
