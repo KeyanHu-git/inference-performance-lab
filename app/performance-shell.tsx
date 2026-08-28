@@ -3,7 +3,6 @@
 import {
   Activity,
   Braces,
-  DatabaseZap,
   FileSearch2,
   Gauge,
   PanelLeftClose,
@@ -56,8 +55,7 @@ export default function PerformanceShell({ children }: { children: ReactNode }) 
         <nav className="performance-nav">
           <section>
             <h2>离线准备</h2>
-            <span className="nav-item nav-muted"><DatabaseZap size={14} /><span><strong>Prepare</strong><small>模型与运行环境准备</small></span></span>
-            <span className="nav-item is-active" aria-current="page"><Gauge size={14} /><span><strong>Load</strong><small>模型加载时间轴</small></span></span>
+            <span className="nav-item is-active" aria-current="page"><Gauge size={14} /><span><strong>Prepare &amp; Load</strong><small>离线准备与模型加载</small></span></span>
           </section>
 
           <section>
@@ -74,7 +72,7 @@ export default function PerformanceShell({ children }: { children: ReactNode }) 
 
         <footer className="performance-sidebar-foot">
           <span><span className="status-dot" />当前模块</span>
-          <strong>Load</strong>
+          <strong>Prepare &amp; Load</strong>
         </footer>
       </aside>
 
