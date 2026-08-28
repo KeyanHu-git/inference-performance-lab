@@ -1530,8 +1530,29 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         >
                           <i className="lens-cut cut-start" /><i className="lens-cut cut-end" />
                           <span className="lens-caption">
-                            <strong>{currentScope?.label ?? '细分节点'}</strong>
-                            <em>{lens.pointCount} 个节点{lens.factor > 1.05 ? ` · ×${lens.factor.toFixed(1)}` : ''}</em>
+                            <span className="lens-caption-copy">
+                              <strong>{currentScope?.label ?? '细分节点'}</strong>
+                              <em>{lens.pointCount} 个节点{lens.factor > 1.05 ? ` · ×${lens.factor.toFixed(1)}` : ''}</em>
+                            </span>
+                            <span className="lens-caption-actions" role="group" aria-label={`${currentScope?.label ?? '细分节点'}层级控制`}>
+                              <button
+                                type="button"
+                                draggable={false}
+                                aria-label="返回上一级"
+                                title={expanded?.scopeStack.length ? '返回上一级' : '当前已是第一层'}
+                                disabled={!expanded?.scopeStack.length}
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => { event.stopPropagation(); stepOutOfLens(experiment.id); }}
+                              ><ChevronLeft size={9} /></button>
+                              <button
+                                type="button"
+                                draggable={false}
+                                aria-label="关闭局部展开"
+                                title="关闭局部展开"
+                                onPointerDown={(event) => event.stopPropagation()}
+                                onClick={(event) => { event.stopPropagation(); closeLens(experiment.id); }}
+                              ><X size={9} /></button>
+                            </span>
                           </span>
                         </span>
                       )}
