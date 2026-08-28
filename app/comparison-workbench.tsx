@@ -1,6 +1,6 @@
 'use client';
 
-import { Bookmark, Check, ChevronDown, ChevronLeft, CircleHelp, Clock3, Eye, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, StickyNote, Trash2, X } from 'lucide-react';
+import { Bookmark, Check, ChevronDown, ChevronLeft, CircleHelp, Clock3, Eye, FileUp, Maximize2, Minus, Pencil, Plus, RotateCcw, Search, Settings2, SlidersHorizontal, Trash2, X } from 'lucide-react';
 import { ChangeEvent, CSSProperties, PointerEvent as ReactPointerEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { ExperimentEditor } from './experiment-editor';
 import { ExperimentEvidence, formatSeconds, normalizeExperiment, RealExperiment, realExperiments, realLogCount, RunStatus, TimeLink, TimeNode } from './comparison-model';
@@ -982,7 +982,6 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   function saveNote(experiment: RealExperiment) {
     saveExperiment({ ...experiment, note: noteDraft.trim() });
     setNoteEditingId(null);
-    setPickerOpen(true);
   }
 
   function startIdentityEdit(experiment: RealExperiment, field: 'model' | 'shortName') {
@@ -1276,9 +1275,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         <button className="visibility-toggle" onClick={() => toggleExperiment(experiment.id)} aria-label={checked ? '隐藏实验' : '显示实验'}><span className="check-box">{checked && <Check size={11} />}</span></button>
                         <button className="picker-meta" onClick={() => toggleExperiment(experiment.id)}><strong>{experiment.model}</strong><small>{experiment.shortName}</small>{experiment.note && <em>{experiment.note}</em>}</button>
                         {!manageMode && <button className={baselineId === experiment.id ? 'picker-icon is-active' : 'picker-icon'} disabled={experiment.status !== 'complete'} onClick={() => setBaselineId(experiment.id)} title={experiment.status !== 'complete' ? '流程未完成，不能设为基线' : baselineId === experiment.id ? '当前全局对比基线' : '设为全局对比基线'}><Bookmark size={12} /></button>}
-                        {!manageMode && <button className="picker-icon" onClick={() => { setNoteEditingId(experiment.id); setNoteDraft(experiment.note ?? ''); }} title="编辑备注"><StickyNote size={12} /></button>}
                         {manageMode && <button className="remove-check" onClick={() => setRemoveSelection((current) => current.includes(experiment.id) ? current.filter((id) => id !== experiment.id) : [...current, experiment.id])}>{removing ? <Check size={12} /> : <Trash2 size={11} />}</button>}
-                        {noteEditingId === experiment.id && <div className="note-editor"><input autoFocus value={noteDraft} onChange={(event) => setNoteDraft(event.target.value)} placeholder="备注会显示在左侧标签列" onKeyDown={(event) => { if (event.key === 'Enter') saveNote(experiment); if (event.key === 'Escape') setNoteEditingId(null); }} /><button onClick={() => saveNote(experiment)}>保存</button></div>}
                       </div>
                     );
                   })}
@@ -1392,12 +1389,37 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                   }}
                 >
                   <div>
-                    <strong>{experiment.model}</strong>
+                    {identityDraft?.experimentId === experiment.id && identityDraft.field === 'model'
+                      ? <input
+                          className="row-identity-input row-model-input"
+                          autoFocus
+                          aria-label="模型名称"
+                          draggable={false}
+                          value={identityDraft.value}
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onChange={(event) => setIdentityDraft({ ...identityDraft, value: event.target.value })}
+                          onBlur={saveIdentityEdit}
+                          onKeyDown={(event) => {
+                            event.stopPropagation();
+                            if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                            if (event.key === 'Escape') { event.preventDefault(); setIdentityDraft(null); }
+                          }}
+                        />
+                      : <strong
+                          className="row-model-name"
+                          tabIndex={0}
+                          title="双击修改模型名称"
+                          onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(experiment, 'model'); }}
+                          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); event.stopPropagation(); startIdentityEdit(experiment, 'model'); } }}
+                        >{experiment.model}</strong>}
                     {identityDraft?.experimentId === experiment.id && identityDraft.field === 'shortName'
                       ? <input
                           className="row-identity-input"
                           autoFocus
                           aria-label="实验操作"
+                          draggable={false}
                           value={identityDraft.value}
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
@@ -1412,11 +1434,38 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
                         />
                       : <span
                           className="row-short-name"
+                          tabIndex={0}
                           title="双击修改实验操作"
                           onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(experiment, 'shortName'); }}
+                          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); event.stopPropagation(); startIdentityEdit(experiment, 'shortName'); } }}
                         >{experiment.shortName}</span>}
                     <small className={`run-status status-${experiment.status}`}><i />{experiment.statusLabel}</small>
-                    {!lens && experiment.note && !noteRepeatsIdentity(experiment) && <small className="human-note"><Pencil size={9} />{experiment.note}</small>}
+                    {!lens && (noteEditingId === experiment.id
+                      ? <input
+                          className="row-note-input"
+                          autoFocus
+                          aria-label="实验备注"
+                          draggable={false}
+                          value={noteDraft}
+                          placeholder="输入备注"
+                          onPointerDown={(event) => event.stopPropagation()}
+                          onClick={(event) => event.stopPropagation()}
+                          onFocus={(event) => event.currentTarget.select()}
+                          onChange={(event) => setNoteDraft(event.target.value)}
+                          onBlur={() => saveNote(experiment)}
+                          onKeyDown={(event) => {
+                            event.stopPropagation();
+                            if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); }
+                            if (event.key === 'Escape') { event.preventDefault(); setNoteDraft(experiment.note ?? ''); event.currentTarget.blur(); }
+                          }}
+                        />
+                      : <small
+                          className={experiment.note && !noteRepeatsIdentity(experiment) ? 'human-note row-note-slot' : 'row-note-slot is-empty'}
+                          tabIndex={0}
+                          title="双击编辑备注"
+                          onDoubleClick={(event) => { event.stopPropagation(); setNoteDraft(experiment.note ?? ''); setNoteEditingId(experiment.id); }}
+                          onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') { event.preventDefault(); event.stopPropagation(); setNoteDraft(experiment.note ?? ''); setNoteEditingId(experiment.id); } }}
+                        >{experiment.note && !noteRepeatsIdentity(experiment) ? <><Pencil size={9} />{experiment.note}</> : '双击添加备注'}</small>)}
                     {lens && (
                       <span className="row-lens-controls" role="group" aria-label={`${currentScope?.label ?? '细分节点'}层级控制`} onPointerDown={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
                         <button
@@ -1536,16 +1585,8 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
           aria-label={`${contextExperiment.model} ${contextExperiment.shortName} 属性菜单`}
           onPointerDown={(event) => event.stopPropagation()}
         >
-          <header className="row-identity-header">
-            {identityDraft?.experimentId === contextExperiment.id && identityDraft.field === 'model'
-              ? <input autoFocus aria-label="模型名称" value={identityDraft.value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setIdentityDraft({ ...identityDraft, value: event.target.value })} onBlur={saveIdentityEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setIdentityDraft(null); } }} />
-              : <button type="button" className="identity-inline-text identity-model" title="双击编辑模型名称" aria-label={`编辑模型名称 ${contextExperiment.model}`} onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(contextExperiment, 'model'); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') startIdentityEdit(contextExperiment, 'model'); }}>{contextExperiment.model}</button>}
-            {identityDraft?.experimentId === contextExperiment.id && identityDraft.field === 'shortName'
-              ? <input autoFocus aria-label="实验操作" value={identityDraft.value} onFocus={(event) => event.currentTarget.select()} onChange={(event) => setIdentityDraft({ ...identityDraft, value: event.target.value })} onBlur={saveIdentityEdit} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); setIdentityDraft(null); } }} />
-              : <button type="button" className="identity-inline-text identity-operation" title="双击编辑实验操作" aria-label={`编辑实验操作 ${contextExperiment.shortName}`} onDoubleClick={(event) => { event.stopPropagation(); startIdentityEdit(contextExperiment, 'shortName'); }} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === 'F2') startIdentityEdit(contextExperiment, 'shortName'); }}>{contextExperiment.shortName}</button>}
-          </header>
+          <header><strong>{contextExperiment.model}</strong><span>{contextExperiment.shortName}</span></header>
           <button role="menuitem" onClick={() => { setEditingNodeId(undefined); setEditing(contextExperiment); setRowContextMenu(null); }}><Pencil size={12} /><span>编辑流程</span></button>
-          <button role="menuitem" onClick={() => { setNoteEditingId(contextExperiment.id); setNoteDraft(contextExperiment.note ?? ''); setPickerOpen(true); setSettingsOpen(false); setHelpOpen(false); setRowContextMenu(null); }}><StickyNote size={12} /><span>编辑备注</span></button>
           <button role="menuitem" disabled={contextExperiment.status !== 'complete'} onClick={() => { setBaselineId(contextExperiment.id); setRowContextMenu(null); }}><Bookmark size={12} /><span>{contextExperiment.status === 'complete' ? '设为全局基线' : '未完成，不能设为基线'}</span></button>
           <button role="menuitem" onClick={() => { setVisibleIds([contextExperiment.id]); setRowContextMenu(null); }}><Eye size={12} /><span>仅显示此实验</span></button>
           <i />
