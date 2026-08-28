@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: '模型加载实验对比',
-  description: '面向不同模型与加载方案的实验时间对比。',
+  title: '推理性能分析',
+  description: '面向大模型推理全流程的实验、时间关系与性能分析。',
 };
 
 export default function RootLayout({

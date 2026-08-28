@@ -1149,7 +1149,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
   return (
     <main className="compare-app" style={{ '--run-column': `${labelWidth}px`, '--timeline-width': timelineRowWidth ? `${timelineRowWidth}px` : '100%' } as CSSProperties}>
       <header className="compare-header">
-        <div className="compare-title"><span className="mark"><span /></span><h1>模型加载对比</h1></div>
+        <div className="compare-title"><span className="mark"><span /></span><h1>模型加载分析</h1></div>
         <div className="header-count"><strong>{visibleExperiments.length}</strong> 个实验<span>{logCount} 个日志</span></div>
       </header>
 
