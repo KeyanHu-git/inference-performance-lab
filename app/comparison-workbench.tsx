@@ -1657,7 +1657,7 @@ export default function ComparisonWorkbench({ backendExperiments = [], backendEv
       {editing && <ExperimentEditor experiment={editing} initialNodeId={editingNodeId} onCancel={() => { setEditing(null); setEditingNodeId(undefined); }} onSave={saveExperiment} />}
 
       <footer className="compare-footer">
-          <span>数据快照 <code>KeyanHu-workspace</code></span>
+          <span>数据快照 <code>实验工作区</code></span>
         <span>2026-08-25 10:33 · {logCount} logs · {activeExperiments.length} runs</span>
       </footer>
     </main>
